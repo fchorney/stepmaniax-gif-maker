@@ -27,6 +27,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+# --- nlohmann/json ---
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+)
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(json)
+
 # Build ImGui as a static library with SDL3 + SDL3_Renderer backends
 add_library(imgui_lib STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -53,5 +63,5 @@ set(BUILD_INTEGRATION_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${SMX_SDK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/smx-sdk-mp)
 
 # --- Main executable ---
-add_executable(stepmaniax-gif-maker src/main.cpp)
-target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp)
+add_executable(stepmaniax-gif-maker src/main.cpp src/preferences.cpp)
+target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)

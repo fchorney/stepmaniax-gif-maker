@@ -1,8 +1,11 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#include "preferences.h"
+#include "default_layout.h"
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <fstream>
 
 int main(int, char**)
 {
@@ -32,6 +35,26 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    // Set up config directory for imgui.ini and preferences
+    std::string configDir = GetConfigDir();
+    static std::string iniPath = configDir + "/imgui.ini";
+    std::string prefsPath = configDir + "/preferences.json";
+    if (!configDir.empty())
+    {
+        // Write default layout on first launch
+        std::ifstream test(iniPath);
+        if (!test.good())
+        {
+            std::ofstream out(iniPath);
+            if (out.is_open())
+                out << kDefaultImGuiIni;
+        }
+        io.IniFilename = iniPath.c_str();
+    }
+
+    Preferences prefs;
+    prefs.Load(prefsPath);
 
     // Style: dark theme with some polish
     ImGui::StyleColorsDark();
@@ -173,6 +196,8 @@ int main(int, char**)
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
     }
+
+    prefs.Save(prefsPath);
 
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
