@@ -1,0 +1,3 @@
+[submodule "src/vendor/stepmaniax-sdk-mp"]
+	path = src/vendor/stepmaniax-sdk-mp
+	url = https://github.com/fchorney/stepmaniax-sdk-mp.git
