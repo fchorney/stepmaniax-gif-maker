@@ -60,6 +60,7 @@ void Preferences::Load(const std::string &path)
         if (j.contains("mode")) mode = j["mode"];
         if (j.contains("recent_files")) recentFiles = j["recent_files"].get<std::vector<std::string>>();
         if (j.contains("max_undo_history")) maxUndoHistory = j["max_undo_history"];
+        if (j.contains("prompt_on_unsaved")) promptOnUnsaved = j["prompt_on_unsaved"];
         if (j.contains("keybindings")) {
             auto &k = j["keybindings"];
             if (k.contains("draw")) keys.draw = k["draw"];
@@ -88,6 +89,7 @@ void Preferences::Save(const std::string &path) const
     j["mode"] = mode;
     j["recent_files"] = recentFiles;
     j["max_undo_history"] = maxUndoHistory;
+    j["prompt_on_unsaved"] = promptOnUnsaved;
     j["keybindings"] = {
         {"draw", keys.draw},
         {"erase", keys.erase},

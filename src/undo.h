@@ -20,6 +20,7 @@ public:
 
     bool CanUndo() const { return m_pos > 0; }
     bool CanRedo() const { return m_pos < (int)m_states.size() - 1; }
+    bool HasUnsavedChanges() const { return m_pos > 0; }
 
     int GetPos() const { return m_pos; }
     int GetCount() const { return (int)m_states.size(); }

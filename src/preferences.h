@@ -32,6 +32,7 @@ struct Preferences {
     std::vector<std::string> recentFiles;
     Keybindings keys;
     int maxUndoHistory = 100;
+    bool promptOnUnsaved = true;
 
     void Load(const std::string &path);
     void Save(const std::string &path) const;

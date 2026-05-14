@@ -138,6 +138,11 @@ int main(int, char**)
     static std::vector<Color> panelClipboard;
     static bool panelClipboardValid = false;
 
+    // Unsaved changes state
+    enum PendingAction { Pending_None = 0, Pending_New, Pending_Import, Pending_Quit };
+    int pendingAction = Pending_None;
+    bool showUnsavedDialog = false;
+
     bool running = true;
     while (running)
     {
@@ -146,10 +151,20 @@ int main(int, char**)
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (event.type == SDL_EVENT_QUIT)
-                running = false;
+            {
+                if (prefs.promptOnUnsaved && undo.HasUnsavedChanges())
+                    { pendingAction = Pending_Quit; showUnsavedDialog = true; }
+                else
+                    running = false;
+            }
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                 event.window.windowID == SDL_GetWindowID(window))
-                running = false;
+            {
+                if (prefs.promptOnUnsaved && undo.HasUnsavedChanges())
+                    { pendingAction = Pending_Quit; showUnsavedDialog = true; }
+                else
+                    running = false;
+            }
         }
 
         ImGui_ImplSDLRenderer3_NewFrame();
@@ -169,11 +184,22 @@ int main(int, char**)
         {
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New...")) showNewDialog = true;
+                if (ImGui::MenuItem("New..."))
+                {
+                    if (prefs.promptOnUnsaved && undo.HasUnsavedChanges())
+                        { pendingAction = Pending_New; showUnsavedDialog = true; }
+                    else
+                        showNewDialog = true;
+                }
                 if (ImGui::MenuItem("Import GIF"))
                 {
-                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                    SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                    if (prefs.promptOnUnsaved && undo.HasUnsavedChanges())
+                        { pendingAction = Pending_Import; showUnsavedDialog = true; }
+                    else
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                    }
                 }
                 if (ImGui::MenuItem("Export GIF"))
                 {
@@ -191,7 +217,13 @@ int main(int, char**)
                     }
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Quit")) running = false;
+                if (ImGui::MenuItem("Quit"))
+                {
+                    if (prefs.promptOnUnsaved && undo.HasUnsavedChanges())
+                        { pendingAction = Pending_Quit; showUnsavedDialog = true; }
+                    else
+                        running = false;
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Edit"))
@@ -310,6 +342,7 @@ int main(int, char**)
                 if (prefs.maxUndoHistory > 10000) prefs.maxUndoHistory = 10000;
                 undo.SetMaxHistory(prefs.maxUndoHistory);
             }
+            ImGui::Checkbox("Prompt on unsaved changes", &prefs.promptOnUnsaved);
 
             ImGui::Separator();
             if (ImGui::Button("Reset to Defaults"))
@@ -409,6 +442,40 @@ int main(int, char**)
                 ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Export failed: %s", exportError.c_str());
             if (ImGui::Button("OK"))
                 ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        // --- Unsaved Changes Dialog ---
+        if (showUnsavedDialog)
+        {
+            ImGui::OpenPopup("Unsaved Changes");
+            showUnsavedDialog = false;
+        }
+        if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("You have unsaved changes. Discard them?");
+            ImGui::Separator();
+            if (ImGui::Button("Discard"))
+            {
+                int action = pendingAction;
+                pendingAction = Pending_None;
+                ImGui::CloseCurrentPopup();
+                if (action == Pending_New)
+                    showNewDialog = true;
+                else if (action == Pending_Import)
+                {
+                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                    SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                }
+                else if (action == Pending_Quit)
+                    running = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+            {
+                pendingAction = Pending_None;
+                ImGui::CloseCurrentPopup();
+            }
             ImGui::EndPopup();
         }
 
@@ -747,38 +814,164 @@ int main(int, char**)
         ImGui::Begin("Preview");
         {
             static bool hwColors = true;
-            ImGui::Text("Pad Preview");
+            static float previewZoom = 6.0f;
+            static bool previewPlaying = false;
+            static double previewLastTime = 0;
+            static int previewFrame = 0;
+
             ImGui::Checkbox("Hardware colors (66%%)", &hwColors);
-            ImGui::Separator();
+            ImGui::SliderFloat("Zoom##prev", &previewZoom, 3.0f, 15.0f, "%.0f");
 
-            const auto &frame = canvas.CurrentFrame();
-            int w = canvas.Width();
-            int h = canvas.Height();
-            float previewScale = 4.0f;
-            ImDrawList *draw = ImGui::GetWindowDrawList();
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-
-            for (int y = 0; y < h - 1; y++) // skip flag row
+            // Independent playback controls
+            if (!previewPlaying)
             {
-                for (int x = 0; x < w; x++)
-                {
-                    Color c = frame.GetPixel(x, y, w);
-                    if (canvas.IsGutter(x, y)) continue;
+                if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = canvas.currentFrame; }
+            }
+            else
+            {
+                if (ImGui::Button("Stop##prev")) previewPlaying = false;
+            }
+            static bool previewSync = true;
+            ImGui::SameLine();
+            ImGui::Checkbox("Sync", &previewSync);
 
-                    ImVec2 tl(pos.x + x * previewScale, pos.y + y * previewScale);
-                    ImVec2 br(tl.x + previewScale, tl.y + previewScale);
-                    if (!c.IsBlack())
-                    {
-                        uint8_t r = hwColors ? (uint8_t)(c.r * 0.6666f) : c.r;
-                        uint8_t g = hwColors ? (uint8_t)(c.g * 0.6666f) : c.g;
-                        uint8_t b = hwColors ? (uint8_t)(c.b * 0.6666f) : c.b;
-                        draw->AddRectFilled(tl, br, IM_COL32(r, g, b, 255));
-                    }
-                    else
-                        draw->AddRectFilled(tl, br, IM_COL32(5, 5, 5, 255));
+            // Advance preview animation independently
+            int totalFrames = (int)canvas.frames.size();
+            if (previewPlaying && totalFrames > 1)
+            {
+                double now = ImGui::GetTime();
+                if (previewFrame >= totalFrames) previewFrame = 0;
+                float dur = canvas.frames[previewFrame].duration;
+                if (now - previewLastTime >= dur)
+                {
+                    previewLastTime = now;
+                    previewFrame = (previewFrame + 1) % totalFrames;
                 }
             }
-            ImGui::Dummy(ImVec2(w * previewScale, (h - 1) * previewScale));
+
+            int displayFrame = previewSync ? canvas.currentFrame : previewFrame;
+            if (displayFrame >= totalFrames) displayFrame = 0;
+
+            ImGui::Separator();
+
+            const auto &frame = canvas.frames[displayFrame];
+            int w = canvas.Width();
+            int h = canvas.Height();
+            ImDrawList *draw = ImGui::GetWindowDrawList();
+            ImVec2 origin = ImGui::GetCursorScreenPos();
+
+            // Panel layout dimensions
+            float ledSpacing = previewZoom;
+            float panelGap = previewZoom * 0.8f;
+
+            // In modern mode: 4x4 outer + 3x3 inner = 25 LEDs per panel
+            // In legacy mode: 4x4 = 16 LEDs per panel
+            // We'll render each panel as a block with LEDs at their physical positions
+
+            int outerGrid = 4;
+            int innerGrid = (canvas.mode == CanvasMode::Modern) ? 3 : 0;
+            float outerSpan = (outerGrid - 1) * ledSpacing;
+            float panelSize = outerSpan + ledSpacing * 2; // padding around LEDs
+            float totalSize = panelSize * 3 + panelGap * 2;
+
+            // Dark background
+            draw->AddRectFilled(origin, ImVec2(origin.x + totalSize, origin.y + totalSize), IM_COL32(20, 20, 20, 255));
+
+            float ledRadius = previewZoom * 0.35f;
+
+            for (int panel = 0; panel < 9; panel++)
+            {
+                int pcol = panel % 3;
+                int prow = panel / 3;
+                float px = origin.x + pcol * (panelSize + panelGap);
+                float py = origin.y + prow * (panelSize + panelGap);
+
+                // Panel outline
+                draw->AddRect(ImVec2(px, py), ImVec2(px + panelSize, py + panelSize),
+                    IM_COL32(80, 80, 80, 255), 2.0f);
+
+                // Panel background
+                draw->AddRectFilled(ImVec2(px + 1, py + 1), ImVec2(px + panelSize - 1, py + panelSize - 1),
+                    IM_COL32(10, 10, 10, 255));
+
+                // Get LED colors from the frame
+                // Outer 4x4 grid
+                int col = panel % 3;
+                int row = panel / 3;
+                float ledPadX = (panelSize - outerSpan) * 0.5f;
+                float ledPadY = ledPadX;
+
+                for (int dy = 0; dy < 4; dy++)
+                {
+                    for (int dx = 0; dx < 4; dx++)
+                    {
+                        int pixX, pixY;
+                        if (canvas.mode == CanvasMode::Modern)
+                        {
+                            pixX = col * 8 + dx * 2;
+                            pixY = row * 8 + dy * 2;
+                        }
+                        else
+                        {
+                            pixX = col * 5 + dx;
+                            pixY = row * 5 + dy;
+                        }
+
+                        Color c = frame.GetPixel(pixX, pixY, w);
+                        float cx = px + ledPadX + dx * ledSpacing;
+                        float cy = py + ledPadY + dy * ledSpacing;
+
+                        ImU32 color;
+                        if (c.IsBlack())
+                            color = IM_COL32(30, 30, 30, 255);
+                        else
+                        {
+                            uint8_t r = hwColors ? (uint8_t)(c.r * 0.6666f) : c.r;
+                            uint8_t g = hwColors ? (uint8_t)(c.g * 0.6666f) : c.g;
+                            uint8_t b = hwColors ? (uint8_t)(c.b * 0.6666f) : c.b;
+                            color = IM_COL32(r, g, b, 255);
+                        }
+                        draw->AddCircleFilled(ImVec2(cx, cy), ledRadius, color);
+                    }
+                }
+
+                // Inner 3x3 grid (modern mode only)
+                if (canvas.mode == CanvasMode::Modern)
+                {
+                    float innerOffset = ledSpacing * 0.5f; // offset from outer grid
+                    for (int dy = 0; dy < 3; dy++)
+                    {
+                        for (int dx = 0; dx < 3; dx++)
+                        {
+                            int pixX = col * 8 + dx * 2 + 1;
+                            int pixY = row * 8 + dy * 2 + 1;
+
+                            Color c = frame.GetPixel(pixX, pixY, w);
+                            float cx = px + ledPadX + innerOffset + dx * ledSpacing;
+                            float cy = py + ledPadY + innerOffset + dy * ledSpacing;
+
+                            ImU32 color;
+                            if (c.IsBlack())
+                                color = IM_COL32(30, 30, 30, 200);
+                            else
+                            {
+                                uint8_t r = hwColors ? (uint8_t)(c.r * 0.6666f) : c.r;
+                                uint8_t g = hwColors ? (uint8_t)(c.g * 0.6666f) : c.g;
+                                uint8_t b = hwColors ? (uint8_t)(c.b * 0.6666f) : c.b;
+                                color = IM_COL32(r, g, b, 255);
+                            }
+                            draw->AddCircleFilled(ImVec2(cx, cy), ledRadius, color);
+                        }
+                    }
+                }
+            }
+
+            ImGui::Dummy(ImVec2(totalSize, totalSize));
+
+            if (previewPlaying)
+                ImGui::Text("Frame %d/%d (playing)", displayFrame + 1, totalFrames);
+            else
+                ImGui::Text("Frame %d/%d", displayFrame + 1, totalFrames);
         }
         ImGui::End();
 
