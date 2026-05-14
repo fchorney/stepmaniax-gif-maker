@@ -118,7 +118,7 @@ void FrameCallback(void *data, struct GIF_WHDR *whdr)
 
 } // namespace
 
-bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError)
+bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, bool *pixelsModified)
 {
     FILE *fp = fopen(path.c_str(), "rb");
     if (!fp)
@@ -175,11 +175,17 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError)
     }
 
     // Clear non-LED pixels (gutters, flag row, non-sampled positions)
+    bool modified = false;
     for (auto &frame : canvas.frames)
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
                 if (!canvas.IsLedPosition(x, y))
+                {
+                    Color c = frame.GetPixel(x, y, w);
+                    if (!c.IsBlack()) modified = true;
                     frame.SetPixel(x, y, w, Color{0, 0, 0});
+                }
 
+    if (pixelsModified) *pixelsModified = modified;
     return true;
 }

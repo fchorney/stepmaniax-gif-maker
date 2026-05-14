@@ -64,6 +64,7 @@ void UndoHistory::Clear()
 {
     m_states.clear();
     m_pos = -1;
+    m_savedPos = -1;
 }
 
 void UndoHistory::SetMaxHistory(int max)

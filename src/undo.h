@@ -20,7 +20,9 @@ public:
 
     bool CanUndo() const { return m_pos > 0; }
     bool CanRedo() const { return m_pos < (int)m_states.size() - 1; }
-    bool HasUnsavedChanges() const { return m_pos > 0; }
+    bool HasUnsavedChanges() const { return m_pos != m_savedPos; }
+
+    void MarkSaved() { m_savedPos = m_pos; }
 
     int GetPos() const { return m_pos; }
     int GetCount() const { return (int)m_states.size(); }
@@ -42,5 +44,6 @@ private:
 
     std::vector<Snapshot> m_states;
     int m_pos = -1;
+    int m_savedPos = 0;
     int m_maxHistory = 100;
 };
