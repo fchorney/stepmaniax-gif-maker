@@ -59,6 +59,13 @@ void Preferences::Load(const std::string &path)
         json j = json::parse(f);
         if (j.contains("mode")) mode = j["mode"];
         if (j.contains("recent_files")) recentFiles = j["recent_files"].get<std::vector<std::string>>();
+        if (j.contains("keybindings")) {
+            auto &k = j["keybindings"];
+            if (k.contains("draw")) keys.draw = k["draw"];
+            if (k.contains("erase")) keys.erase = k["erase"];
+            if (k.contains("fill")) keys.fill = k["fill"];
+            if (k.contains("pick")) keys.pick = k["pick"];
+        }
     } catch (...) {
         // Ignore malformed config, use defaults
     }
@@ -69,6 +76,12 @@ void Preferences::Save(const std::string &path) const
     json j;
     j["mode"] = mode;
     j["recent_files"] = recentFiles;
+    j["keybindings"] = {
+        {"draw", keys.draw},
+        {"erase", keys.erase},
+        {"fill", keys.fill},
+        {"pick", keys.pick},
+    };
 
     std::ofstream f(path);
     if (f.is_open())
