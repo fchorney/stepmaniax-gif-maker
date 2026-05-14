@@ -35,6 +35,7 @@ struct Canvas {
 
     void Init(CanvasMode m);
     void AddFrame();
+    void DuplicateFrame(int idx);
     void DeleteFrame(int idx);
     CanvasFrame &CurrentFrame();
     const CanvasFrame &CurrentFrame() const;

@@ -4,12 +4,27 @@
 #include "preferences.h"
 #include "default_layout.h"
 #include "canvas.h"
+#include "gif_export.h"
 #include <SDL3/SDL.h>
 #include <cstdio>
 #include <fstream>
 #include <vector>
 
 enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Pick };
+
+// File dialog state
+static std::string g_exportPath;
+static bool g_exportRequested = false;
+
+static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
+{
+    (void)userdata; (void)filter;
+    if (filelist && filelist[0])
+    {
+        g_exportPath = filelist[0];
+        g_exportRequested = true;
+    }
+}
 
 // Flood fill that operates on LED positions within a single panel
 static void FloodFill(CanvasFrame &frame, int w, int h, int x, int y, Color target, Color replacement, const Canvas &canvas)
@@ -132,7 +147,11 @@ int main(int, char**)
                 if (ImGui::MenuItem("New")) canvas.Init(canvas.mode);
                 if (ImGui::MenuItem("Open .smxgifs")) {}
                 if (ImGui::MenuItem("Save")) {}
-                if (ImGui::MenuItem("Export GIF")) {}
+                if (ImGui::MenuItem("Export GIF"))
+                {
+                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                    SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Quit")) running = false;
                 ImGui::EndMenu();
@@ -234,6 +253,38 @@ int main(int, char**)
                 rebindTarget = nullptr;
                 ImGui::CloseCurrentPopup();
             }
+            ImGui::EndPopup();
+        }
+
+        // --- GIF Export handling ---
+        static std::string exportError;
+        static bool showExportResult = false;
+        static bool exportSuccess = false;
+
+        if (g_exportRequested)
+        {
+            g_exportRequested = false;
+            std::string path = g_exportPath;
+            // Ensure .gif extension
+            if (path.size() < 4 || path.substr(path.size() - 4) != ".gif")
+                path += ".gif";
+            exportSuccess = ExportGif(canvas, path, exportError);
+            showExportResult = true;
+        }
+
+        if (showExportResult)
+        {
+            ImGui::OpenPopup("Export Result");
+            showExportResult = false;
+        }
+        if (ImGui::BeginPopupModal("Export Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            if (exportSuccess)
+                ImGui::Text("GIF exported successfully!");
+            else
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Export failed: %s", exportError.c_str());
+            if (ImGui::Button("OK"))
+                ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
@@ -479,17 +530,132 @@ int main(int, char**)
         // --- Timeline ---
         ImGui::Begin("Timeline");
         {
+            static bool playing = false;
+            static double lastFrameTime = 0;
+
             int totalFrames = (int)canvas.frames.size();
-            ImGui::SliderInt("Frame", &canvas.currentFrame, 0, totalFrames - 1);
+
+            // Playback logic
+            if (playing && totalFrames > 1)
+            {
+                double now = ImGui::GetTime();
+                float frameDur = canvas.CurrentFrame().duration;
+                if (now - lastFrameTime >= frameDur)
+                {
+                    lastFrameTime = now;
+                    canvas.currentFrame = (canvas.currentFrame + 1) % totalFrames;
+                }
+            }
+
+            // Controls
+            if (!playing)
+            {
+                if (ImGui::Button("Play"))
+                {
+                    playing = true;
+                    lastFrameTime = ImGui::GetTime();
+                }
+            }
+            else
+            {
+                if (ImGui::Button("Pause"))
+                    playing = false;
+            }
             ImGui::SameLine();
-            ImGui::Text("/ %d", totalFrames);
-            if (ImGui::Button("+"))
-                canvas.AddFrame();
+            if (ImGui::Button("|<"))
+                canvas.currentFrame = 0;
             ImGui::SameLine();
-            if (ImGui::Button("-"))
-                canvas.DeleteFrame(canvas.currentFrame);
+            if (ImGui::Button("<") && canvas.currentFrame > 0)
+                canvas.currentFrame--;
             ImGui::SameLine();
-            ImGui::Text("Duration: 33ms (30 FPS) | Max: 32 frames");
+            if (ImGui::Button(">") && canvas.currentFrame < totalFrames - 1)
+                canvas.currentFrame++;
+            ImGui::SameLine();
+            if (ImGui::Button(">|"))
+                canvas.currentFrame = totalFrames - 1;
+            ImGui::SameLine();
+            ImGui::Text("Frame %d / %d", canvas.currentFrame + 1, totalFrames);
+
+            // Frame operations
+            ImGui::SameLine();
+            ImGui::Spacing(); ImGui::SameLine();
+            if (ImGui::Button("-") && totalFrames > 1) canvas.DeleteFrame(canvas.currentFrame);
+            ImGui::SameLine();
+            if (ImGui::Button("+")) { canvas.AddFrame(); canvas.currentFrame = (int)canvas.frames.size() - 1; }
+            ImGui::SameLine();
+            if (ImGui::Button("Dup")) canvas.DuplicateFrame(canvas.currentFrame);
+            ImGui::SameLine();
+            if (ImGui::Button("<<") && canvas.currentFrame > 0)
+            {
+                std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame - 1]);
+                canvas.currentFrame--;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(">>") && canvas.currentFrame < totalFrames - 1)
+            {
+                std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame + 1]);
+                canvas.currentFrame++;
+            }
+            ImGui::SameLine();
+            ImGui::Text("(max 32)");
+
+            // Arrow key navigation (when not typing)
+            if (!io.WantTextInput && !playing)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) && canvas.currentFrame > 0)
+                    canvas.currentFrame--;
+                if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) && canvas.currentFrame < totalFrames - 1)
+                    canvas.currentFrame++;
+            }
+
+            ImGui::Separator();
+
+            // Frame thumbnails
+            int w = canvas.Width();
+            int h = canvas.Height() - 1; // skip flag row
+            float thumbScale = 2.0f;
+            float thumbW = w * thumbScale;
+            float thumbH = h * thumbScale;
+
+            ImGui::BeginChild("##thumbs", ImVec2(0, thumbH + 20), false, ImGuiWindowFlags_HorizontalScrollbar);
+            for (int f = 0; f < totalFrames; f++)
+            {
+                ImGui::PushID(f);
+                ImVec2 pos = ImGui::GetCursorScreenPos();
+                ImDrawList *draw = ImGui::GetWindowDrawList();
+
+                // Background for thumbnail
+                draw->AddRectFilled(pos, ImVec2(pos.x + thumbW, pos.y + thumbH), IM_COL32(15, 15, 15, 255));
+
+                // Highlight current frame with outline
+                if (f == canvas.currentFrame)
+                    draw->AddRect(ImVec2(pos.x - 2, pos.y - 2),
+                        ImVec2(pos.x + thumbW + 2, pos.y + thumbH + 2),
+                        IM_COL32(255, 200, 0, 255), 0, 0, 2.0f);
+
+                // Draw thumbnail
+                const auto &frame = canvas.frames[f];
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        if (canvas.IsGutter(x, y)) continue;
+                        Color c = frame.GetPixel(x, y, w);
+                        if (c.IsBlack()) continue;
+                        ImVec2 tl(pos.x + x * thumbScale, pos.y + y * thumbScale);
+                        ImVec2 br(tl.x + thumbScale, tl.y + thumbScale);
+                        draw->AddRectFilled(tl, br, IM_COL32(c.r, c.g, c.b, 255));
+                    }
+                }
+
+                // Clickable area
+                if (ImGui::InvisibleButton("##thumb", ImVec2(thumbW, thumbH)))
+                    canvas.currentFrame = f;
+
+                ImGui::SameLine();
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
         }
         ImGui::End();
 

@@ -31,6 +31,14 @@ void Canvas::AddFrame()
     frames.push_back(std::move(f));
 }
 
+void Canvas::DuplicateFrame(int idx)
+{
+    if (idx < 0 || idx >= (int)frames.size()) return;
+    CanvasFrame copy = frames[idx];
+    frames.insert(frames.begin() + idx + 1, std::move(copy));
+    currentFrame = idx + 1;
+}
+
 void Canvas::DeleteFrame(int idx)
 {
     if ((int)frames.size() <= 1) return;
