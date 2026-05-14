@@ -59,6 +59,7 @@ void Preferences::Load(const std::string &path)
         json j = json::parse(f);
         if (j.contains("mode")) mode = j["mode"];
         if (j.contains("recent_files")) recentFiles = j["recent_files"].get<std::vector<std::string>>();
+        if (j.contains("max_undo_history")) maxUndoHistory = j["max_undo_history"];
         if (j.contains("keybindings")) {
             auto &k = j["keybindings"];
             if (k.contains("draw")) keys.draw = k["draw"];
@@ -86,6 +87,7 @@ void Preferences::Save(const std::string &path) const
     json j;
     j["mode"] = mode;
     j["recent_files"] = recentFiles;
+    j["max_undo_history"] = maxUndoHistory;
     j["keybindings"] = {
         {"draw", keys.draw},
         {"erase", keys.erase},

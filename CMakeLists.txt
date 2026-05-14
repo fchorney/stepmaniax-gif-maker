@@ -63,6 +63,6 @@ set(BUILD_INTEGRATION_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${SMX_SDK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/smx-sdk-mp)
 
 # --- Main executable ---
-add_executable(stepmaniax-gif-maker src/main.cpp src/preferences.cpp src/canvas.cpp src/gif_export.cpp)
+add_executable(stepmaniax-gif-maker src/main.cpp src/preferences.cpp src/canvas.cpp src/gif_export.cpp src/gif_import.cpp src/undo.cpp)
 target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)

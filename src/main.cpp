@@ -5,9 +5,12 @@
 #include "default_layout.h"
 #include "canvas.h"
 #include "gif_export.h"
+#include "gif_import.h"
+#include "undo.h"
 #include <SDL3/SDL.h>
 #include <cstdio>
 #include <fstream>
+#include <set>
 #include <vector>
 
 enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Pick };
@@ -15,6 +18,8 @@ enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Pick };
 // File dialog state
 static std::string g_exportPath;
 static bool g_exportRequested = false;
+static std::string g_importPath;
+static bool g_importRequested = false;
 
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
@@ -23,6 +28,16 @@ static void ExportDialogCallback(void *userdata, const char * const *filelist, i
     {
         g_exportPath = filelist[0];
         g_exportRequested = true;
+    }
+}
+
+static void ImportDialogCallback(void *userdata, const char * const *filelist, int filter)
+{
+    (void)userdata; (void)filter;
+    if (filelist && filelist[0])
+    {
+        g_importPath = filelist[0];
+        g_importRequested = true;
     }
 }
 
@@ -111,9 +126,17 @@ int main(int, char**)
     Canvas canvas;
     canvas.Init(prefs.mode == "legacy" ? CanvasMode::Legacy : CanvasMode::Modern);
 
+    UndoHistory undo;
+    undo.SetMaxHistory(prefs.maxUndoHistory);
+    undo.SaveState(canvas, "Initial"); // initial state
+
     int tool = Tool_Draw;
     ImVec4 currentColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
     float cellSize = 20.0f;
+    bool strokeActive = false;
+    static int rightClickPanel = -1;
+    static std::vector<Color> panelClipboard;
+    static bool panelClipboardValid = false;
 
     bool running = true;
     while (running)
@@ -138,19 +161,34 @@ int main(int, char**)
         // Settings state (declared before menu bar which references it)
         static bool showSettings = false;
         static int *rebindTarget = nullptr;
+        static bool showNewDialog = false;
+        static bool showExportWarning = false;
 
         // --- Menu Bar ---
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New")) canvas.Init(canvas.mode);
-                if (ImGui::MenuItem("Open .smxgifs")) {}
-                if (ImGui::MenuItem("Save")) {}
-                if (ImGui::MenuItem("Export GIF"))
+                if (ImGui::MenuItem("New...")) showNewDialog = true;
+                if (ImGui::MenuItem("Import GIF"))
                 {
                     SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                    SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                    SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                }
+                if (ImGui::MenuItem("Export GIF"))
+                {
+                    // Check color limits first
+                    bool overLimit = false;
+                    for (int p = 0; p < 9; p++)
+                        if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                            overLimit = true;
+                    if (overLimit)
+                        showExportWarning = true;
+                    else
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                    }
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Quit")) running = false;
@@ -158,19 +196,24 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Edit"))
             {
-                if (ImGui::MenuItem("Undo", "Ctrl+Z")) {}
-                if (ImGui::MenuItem("Redo", "Ctrl+Y")) {}
+                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undo.CanUndo())) undo.Undo(canvas);
+                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undo.CanRedo())) undo.Redo(canvas);
                 ImGui::Separator();
-                if (ImGui::MenuItem("Clear All")) canvas.ClearAll();
+                if (ImGui::MenuItem("Clear All")) { canvas.ClearAll(); undo.SaveState(canvas, "Clear All"); }
                 if (ImGui::BeginMenu("Clear Panel"))
                 {
                     for (int p = 0; p < 9; p++)
                     {
                         char label[16];
                         snprintf(label, sizeof(label), "Panel %d", p);
-                        if (ImGui::MenuItem(label)) canvas.ClearPanel(p);
+                        if (ImGui::MenuItem(label)) { canvas.ClearPanel(p); undo.SaveState(canvas, "Clear Panel"); }
                     }
                     ImGui::EndMenu();
+                }
+                if (ImGui::MenuItem("Quantize All Panels (15 colors)"))
+                {
+                    for (int p = 0; p < 9; p++) canvas.QuantizePanel(p);
+                    undo.SaveState(canvas, "Quantize All");
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Settings...")) showSettings = true;
@@ -178,10 +221,10 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Animation"))
             {
-                if (ImGui::MenuItem("Add Frame"))
-                    canvas.AddFrame();
-                if (ImGui::MenuItem("Delete Frame"))
-                    canvas.DeleteFrame(canvas.currentFrame);
+                if (ImGui::MenuItem("Add Frame", nullptr, false, (int)canvas.frames.size() < Canvas::MaxFrames))
+                    { canvas.AddFrame(); undo.SaveState(canvas, "Add Frame"); }
+                if (ImGui::MenuItem("Delete Frame", nullptr, false, (int)canvas.frames.size() > 1))
+                    { canvas.DeleteFrame(canvas.currentFrame); undo.SaveState(canvas, "Delete Frame"); }
                 if (ImGui::MenuItem("Set Loop Point")) {}
                 ImGui::EndMenu();
             }
@@ -257,6 +300,17 @@ int main(int, char**)
             KeybindRow("Shift Left", &prefs.keys.shiftLeft);
             KeybindRow("Shift Right", &prefs.keys.shiftRight);
 
+            ImGui::Spacing();
+            ImGui::Text("General");
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(100);
+            if (ImGui::InputInt("Max Undo History", &prefs.maxUndoHistory))
+            {
+                if (prefs.maxUndoHistory < 10) prefs.maxUndoHistory = 10;
+                if (prefs.maxUndoHistory > 10000) prefs.maxUndoHistory = 10000;
+                undo.SetMaxHistory(prefs.maxUndoHistory);
+            }
+
             ImGui::Separator();
             if (ImGui::Button("Reset to Defaults"))
             {
@@ -281,11 +335,65 @@ int main(int, char**)
         {
             g_exportRequested = false;
             std::string path = g_exportPath;
-            // Ensure .gif extension
             if (path.size() < 4 || path.substr(path.size() - 4) != ".gif")
                 path += ".gif";
             exportSuccess = ExportGif(canvas, path, exportError);
             showExportResult = true;
+        }
+
+        if (showExportWarning)
+        {
+            ImGui::OpenPopup("Export Warning");
+            showExportWarning = false;
+        }
+        if (ImGui::BeginPopupModal("Export Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
+            ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
+            int w = canvas.Width(), h = canvas.Height();
+            for (int f = 0; f < (int)canvas.frames.size(); f++)
+            {
+                for (int p = 0; p < 9; p++)
+                {
+                    // Count colors for this panel on this frame
+                    std::set<uint32_t> colors;
+                    const auto &frame = canvas.frames[f];
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            if (canvas.PanelAt(x, y) != p) continue;
+                            if (!canvas.IsLedPosition(x, y)) continue;
+                            Color c = frame.GetPixel(x, y, w);
+                            if (c.IsBlack()) continue;
+                            colors.insert((uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b);
+                        }
+                    if ((int)colors.size() > 15)
+                        ImGui::Text("Frame %d, Panel %d: %d colors", f + 1, p, (int)colors.size());
+                }
+            }
+            ImGui::EndChild();
+            ImGui::Separator();
+            ImGui::Text("The GIF will work for host playback but cannot be\nuploaded to firmware. Export anyway?");
+            ImGui::Separator();
+            if (ImGui::Button("Quantize & Export"))
+            {
+                for (int p = 0; p < 9; p++) canvas.QuantizePanel(p);
+                undo.SaveState(canvas, "Quantize All");
+                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Export Anyway"))
+            {
+                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         if (showExportResult)
@@ -300,6 +408,70 @@ int main(int, char**)
             else
                 ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Export failed: %s", exportError.c_str());
             if (ImGui::Button("OK"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        // --- GIF Import handling ---
+        static std::string importError;
+        static bool showImportResult = false;
+        static bool importSuccess = false;
+
+        if (g_importRequested)
+        {
+            g_importRequested = false;
+            importSuccess = ImportGif(g_importPath, canvas, importError);
+            if (importSuccess)
+            {
+                undo.Clear();
+                undo.SaveState(canvas, "Import");
+            }
+            else
+                showImportResult = true;
+        }
+
+        if (showImportResult)
+        {
+            ImGui::OpenPopup("Import Result");
+            showImportResult = false;
+        }
+        if (ImGui::BeginPopupModal("Import Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Import failed: %s", importError.c_str());
+            if (ImGui::Button("OK"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        // --- New Dialog ---
+        if (showNewDialog)
+        {
+            ImGui::OpenPopup("New Animation");
+            showNewDialog = false;
+        }
+        if (ImGui::BeginPopupModal("New Animation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Create a new animation. This will discard current work.");
+            ImGui::Separator();
+            static int newMode = 1;
+            ImGui::RadioButton("Legacy (14x15) - host playback only", &newMode, 0);
+            ImGui::RadioButton("Modern (23x24) - host playback + firmware upload", &newMode, 1);
+            ImGui::Separator();
+            if (ImGui::Button("Create"))
+            {
+                CanvasMode newCanvasMode = newMode == 1 ? CanvasMode::Modern : CanvasMode::Legacy;
+                if (newCanvasMode != canvas.mode)
+                {
+                    panelClipboard.clear();
+                    panelClipboardValid = false;
+                }
+                canvas.Init(newCanvasMode);
+                undo.Clear();
+                undo.SaveState(canvas, "Initial");  // save initial state
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
                 ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
@@ -324,14 +496,14 @@ int main(int, char**)
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.erase)) tool = Tool_Erase;
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.fill)) tool = Tool_Fill;
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.pick)) tool = Tool_Pick;
+
+            // Undo/Redo
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) undo.Undo(canvas);
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) undo.Redo(canvas);
         }
         ImGui::Separator();
-        ImGui::Text("Mode");
-        int modeInt = (canvas.mode == CanvasMode::Modern) ? 1 : 0;
-        if (ImGui::RadioButton("Legacy (14x15)", &modeInt, 0))
-            canvas.Init(CanvasMode::Legacy);
-        if (ImGui::RadioButton("Modern (23x24)", &modeInt, 1))
-            canvas.Init(CanvasMode::Modern);
+        const char *modeLabel = (canvas.mode == CanvasMode::Modern) ? "Modern (23x24)" : "Legacy (14x15)";
+        ImGui::Text("Mode: %s", modeLabel);
         ImGui::Separator();
         ImGui::SliderFloat("Zoom", &cellSize, 8.0f, 40.0f, "%.0f px");
         ImGui::End();
@@ -351,7 +523,7 @@ int main(int, char**)
             ImGui::ColorPicker3("##color", (float *)&currentColor,
                 ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview);
             ImGui::Separator();
-            ImGui::Text("Panel Colors:");
+            ImGui::Text("Panel Colors (frame %d):", canvas.currentFrame + 1);
             for (int p = 0; p < 9; p++)
             {
                 int count = canvas.ColorCountForPanel(p);
@@ -444,6 +616,9 @@ int main(int, char**)
                     // Tool actions on click/drag
                     if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && canvasActive)
                     {
+                        if (!strokeActive)
+                            strokeActive = true; // stroke just started
+
                         auto &editFrame = canvas.CurrentFrame();
                         Color drawColor = {
                             (uint8_t)(currentColor.x * 255),
@@ -483,22 +658,86 @@ int main(int, char**)
                 if (mx >= 0 && mx < gridW && my >= 0 && my < gridH)
                 {
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                    {
+                        rightClickPanel = canvas.PanelAt(mx, my);
+                        if (rightClickPanel < 0)
+                        {
+                            // Clicked on a gutter — figure out nearest panel from position
+                            int col = (canvas.mode == CanvasMode::Modern) ?
+                                (mx < 8 ? 0 : mx < 16 ? 1 : 2) :
+                                (mx < 5 ? 0 : mx < 10 ? 1 : 2);
+                            int row = (canvas.mode == CanvasMode::Modern) ?
+                                (my < 8 ? 0 : my < 16 ? 1 : 2) :
+                                (my < 5 ? 0 : my < 10 ? 1 : 2);
+                            rightClickPanel = row * 3 + col;
+                        }
                         ImGui::OpenPopup("##canvas_ctx");
+                    }
                 }
+            }
+
+            // Save undo state when stroke ends
+            if (strokeActive && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                strokeActive = false;
+                const char *toolLabel = "Draw";
+                if (tool == Tool_Erase) toolLabel = "Erase";
+                else if (tool == Tool_Fill) toolLabel = "Fill";
+                undo.SaveState(canvas, toolLabel);
             }
 
             if (ImGui::BeginPopup("##canvas_ctx"))
             {
-                if (ImGui::MenuItem("Clear This Panel"))
+                if (rightClickPanel >= 0)
+                    ImGui::Text("Panel %d", rightClickPanel);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Copy Panel") && rightClickPanel >= 0)
                 {
-                    ImVec2 mouse = ImGui::GetMousePos();
-                    int mx = (int)((mouse.x - canvasPos.x) / cellSize);
-                    int my = (int)((mouse.y - canvasPos.y) / cellSize);
-                    int panel = canvas.PanelAt(mx, my);
-                    canvas.ClearPanel(panel);
+                    // Copy all LED pixels from this panel in current frame
+                    panelClipboard.clear();
+                    int w = canvas.Width(), h = canvas.Height();
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                            if (canvas.PanelAt(x, y) == rightClickPanel && canvas.IsLedPosition(x, y))
+                                panelClipboard.push_back(canvas.CurrentFrame().GetPixel(x, y, w));
+                    panelClipboardValid = true;
                 }
+                if (ImGui::MenuItem("Paste Panel", nullptr, false, panelClipboardValid) && rightClickPanel >= 0)
+                {
+                    int w = canvas.Width(), h = canvas.Height();
+                    int idx = 0;
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                            if (canvas.PanelAt(x, y) == rightClickPanel && canvas.IsLedPosition(x, y))
+                            {
+                                if (idx < (int)panelClipboard.size())
+                                    canvas.CurrentFrame().SetPixel(x, y, w, panelClipboard[idx]);
+                                idx++;
+                            }
+                    undo.SaveState(canvas, "Paste Panel");
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Clear This Panel") && rightClickPanel >= 0)
+                {
+                    canvas.ClearPanel(rightClickPanel);
+                    undo.SaveState(canvas, "Clear Panel");
+                }
+                if (ImGui::MenuItem("Quantize This Panel (15 colors)") && rightClickPanel >= 0)
+                {
+                    canvas.QuantizePanel(rightClickPanel);
+                    undo.SaveState(canvas, "Quantize Panel");
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Clear All Panels"))
+                {
                     canvas.ClearAll();
+                    undo.SaveState(canvas, "Clear All");
+                }
+                if (ImGui::MenuItem("Quantize All Panels"))
+                {
+                    for (int p = 0; p < 9; p++) canvas.QuantizePanel(p);
+                    undo.SaveState(canvas, "Quantize All");
+                }
                 ImGui::EndPopup();
             }
         }
@@ -540,6 +779,32 @@ int main(int, char**)
                 }
             }
             ImGui::Dummy(ImVec2(w * previewScale, (h - 1) * previewScale));
+        }
+        ImGui::End();
+
+        // --- History Panel ---
+        ImGui::Begin("History");
+        {
+            ImGui::Text("Undo History (%d/%d, max %d)", undo.GetPos(), undo.GetCount() - 1, undo.GetMaxHistory());
+            ImGui::Separator();
+            ImGui::BeginChild("##history_list", ImVec2(0, 0), false);
+            for (int i = undo.GetCount() - 1; i >= 0; i--)
+            {
+                bool isCurrent = (i == undo.GetPos());
+                const char *lbl = undo.GetLabel(i);
+                char buf[64];
+                snprintf(buf, sizeof(buf), "%s %s###h%d", isCurrent ? ">" : " ", lbl[0] ? lbl : "?", i);
+
+                if (isCurrent)
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 0, 1));
+
+                if (ImGui::Selectable(buf, isCurrent))
+                    undo.GoTo(i, canvas);
+
+                if (isCurrent)
+                    ImGui::PopStyleColor();
+            }
+            ImGui::EndChild();
         }
         ImGui::End();
 
@@ -595,25 +860,46 @@ int main(int, char**)
             // Frame operations
             ImGui::SameLine();
             ImGui::Spacing(); ImGui::SameLine();
-            if (ImGui::Button("-") && totalFrames > 1) canvas.DeleteFrame(canvas.currentFrame);
+            if (ImGui::Button("-") && totalFrames > 1) { canvas.DeleteFrame(canvas.currentFrame); undo.SaveState(canvas, "Delete Frame"); }
             ImGui::SameLine();
-            if (ImGui::Button("+")) { canvas.AddFrame(); canvas.currentFrame = (int)canvas.frames.size() - 1; }
+            bool atFrameLimit = (totalFrames >= Canvas::MaxFrames);
+            if (atFrameLimit) ImGui::BeginDisabled();
+            if (ImGui::Button("+")) { canvas.AddFrame(); undo.SaveState(canvas, "Add Frame"); }
             ImGui::SameLine();
-            if (ImGui::Button("Dup")) canvas.DuplicateFrame(canvas.currentFrame);
+            if (ImGui::Button("Dup")) { canvas.DuplicateFrame(canvas.currentFrame); undo.SaveState(canvas, "Duplicate Frame"); }
+            if (atFrameLimit) ImGui::EndDisabled();
             ImGui::SameLine();
             if (ImGui::Button("<<") && canvas.currentFrame > 0)
             {
                 std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame - 1]);
                 canvas.currentFrame--;
+                undo.SaveState(canvas, "Shift Left");
             }
             ImGui::SameLine();
             if (ImGui::Button(">>") && canvas.currentFrame < totalFrames - 1)
             {
                 std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame + 1]);
                 canvas.currentFrame++;
+                undo.SaveState(canvas, "Shift Right");
             }
             ImGui::SameLine();
-            ImGui::Text("(max 32)");
+            if (atFrameLimit)
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d/%d max)", totalFrames, Canvas::MaxFrames);
+            else
+                ImGui::Text("(%d/%d max)", totalFrames, Canvas::MaxFrames);
+
+            // Per-frame duration
+            float durMs = canvas.CurrentFrame().duration * 1000.0f;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80);
+            if (ImGui::InputFloat("ms##dur", &durMs, 0, 0, "%.0f"))
+            {
+                if (durMs < 10) durMs = 10;
+                if (durMs > 2550) durMs = 2550;
+                canvas.CurrentFrame().duration = durMs / 1000.0f;
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit())
+                undo.SaveState(canvas, "Duration");
 
             // Arrow key navigation (when not typing)
             if (!io.WantTextInput && !playing)
@@ -626,21 +912,23 @@ int main(int, char**)
                     canvas.currentFrame = 0;
                 if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.lastFrame))
                     canvas.currentFrame = totalFrames - 1;
-                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.addFrame))
-                    { canvas.AddFrame(); canvas.currentFrame = (int)canvas.frames.size() - 1; }
-                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.dupFrame))
-                    canvas.DuplicateFrame(canvas.currentFrame);
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.addFrame) && totalFrames < Canvas::MaxFrames)
+                    { canvas.AddFrame(); undo.SaveState(canvas, "Add Frame"); }
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.dupFrame) && totalFrames < Canvas::MaxFrames)
+                    { canvas.DuplicateFrame(canvas.currentFrame); undo.SaveState(canvas, "Duplicate Frame"); }
                 if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.deleteFrame) && totalFrames > 1)
-                    canvas.DeleteFrame(canvas.currentFrame);
+                    { canvas.DeleteFrame(canvas.currentFrame); undo.SaveState(canvas, "Delete Frame"); }
                 if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.shiftLeft) && canvas.currentFrame > 0)
                 {
                     std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame - 1]);
                     canvas.currentFrame--;
+                    undo.SaveState(canvas, "Shift Left");
                 }
                 if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.shiftRight) && canvas.currentFrame < totalFrames - 1)
                 {
                     std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame + 1]);
                     canvas.currentFrame++;
+                    undo.SaveState(canvas, "Shift Right");
                 }
             }
             if (!io.WantTextInput)

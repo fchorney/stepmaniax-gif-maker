@@ -32,6 +32,7 @@ struct Canvas {
 
     int Width() const { return mode == CanvasMode::Modern ? 23 : 14; }
     int Height() const { return mode == CanvasMode::Modern ? 24 : 15; }
+    static constexpr int MaxFrames = 32;
 
     void Init(CanvasMode m);
     void AddFrame();
@@ -55,9 +56,15 @@ struct Canvas {
     // Count unique non-black colors used in a panel for the current frame.
     int ColorCountForPanel(int panel) const;
 
+    // Count unique non-black colors used in a panel across ALL frames.
+    int ColorCountForPanelAllFrames(int panel) const;
+
     // Clear all LED positions in a specific panel to black.
     void ClearPanel(int panel);
 
     // Clear all LED positions in all panels to black.
     void ClearAll();
+
+    // Quantize a panel's colors to at most maxColors across all frames.
+    void QuantizePanel(int panel, int maxColors = 15);
 };

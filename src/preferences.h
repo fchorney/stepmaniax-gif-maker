@@ -31,6 +31,7 @@ struct Preferences {
     std::string mode = "modern"; // "legacy" or "modern"
     std::vector<std::string> recentFiles;
     Keybindings keys;
+    int maxUndoHistory = 100;
 
     void Load(const std::string &path);
     void Save(const std::string &path) const;

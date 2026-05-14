@@ -1,5 +1,6 @@
 #include "canvas.h"
 #include <algorithm>
+#include <climits>
 #include <set>
 
 Color CanvasFrame::GetPixel(int x, int y, int width) const
@@ -26,13 +27,24 @@ void Canvas::Init(CanvasMode m)
 
 void Canvas::AddFrame()
 {
+    if ((int)frames.size() >= 32) return;
     CanvasFrame f;
     f.pixels.resize(Width() * Height(), Color{0, 0, 0});
-    frames.push_back(std::move(f));
+    if (frames.empty())
+    {
+        frames.push_back(std::move(f));
+        currentFrame = 0;
+    }
+    else
+    {
+        frames.insert(frames.begin() + currentFrame + 1, std::move(f));
+        currentFrame++;
+    }
 }
 
 void Canvas::DuplicateFrame(int idx)
 {
+    if ((int)frames.size() >= 32) return;
     if (idx < 0 || idx >= (int)frames.size()) return;
     CanvasFrame copy = frames[idx];
     frames.insert(frames.begin() + idx + 1, std::move(copy));
@@ -168,4 +180,95 @@ void Canvas::ClearAll()
 {
     for (int p = 0; p < 9; p++)
         ClearPanel(p);
+}
+
+int Canvas::ColorCountForPanelAllFrames(int panel) const
+{
+    if (panel < 0 || panel > 8) return 0;
+    int w = Width(), h = Height();
+    std::set<uint32_t> colors;
+    for (const auto &frame : frames)
+    {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (PanelAt(x, y) != panel) continue;
+                if (!IsLedPosition(x, y)) continue;
+                Color c = frame.GetPixel(x, y, w);
+                if (c.IsBlack()) continue;
+                colors.insert((uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b);
+            }
+    }
+    return (int)colors.size();
+}
+
+void Canvas::QuantizePanel(int panel, int maxColors)
+{
+    if (panel < 0 || panel > 8) return;
+    int w = Width(), h = Height();
+
+    // Collect all non-black colors used in this panel across all frames
+    struct ColorCount { Color c; int count = 0; };
+    std::vector<ColorCount> palette;
+
+    for (const auto &frame : frames)
+    {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (PanelAt(x, y) != panel) continue;
+                if (!IsLedPosition(x, y)) continue;
+                Color c = frame.GetPixel(x, y, w);
+                if (c.IsBlack()) continue;
+                bool found = false;
+                for (auto &pc : palette)
+                    if (pc.c == c) { pc.count++; found = true; break; }
+                if (!found)
+                    palette.push_back({c, 1});
+            }
+    }
+
+    if ((int)palette.size() <= maxColors) return; // already within limit
+
+    // Sort by usage count (most used first), keep top maxColors
+    std::sort(palette.begin(), palette.end(), [](const ColorCount &a, const ColorCount &b) {
+        return a.count > b.count;
+    });
+
+    // Build the kept palette
+    std::vector<Color> kept;
+    for (int i = 0; i < maxColors && i < (int)palette.size(); i++)
+        kept.push_back(palette[i].c);
+
+    // Map removed colors to nearest kept color
+    auto Nearest = [&](Color c) -> Color {
+        int bestDist = INT_MAX;
+        Color best = kept[0];
+        for (const auto &k : kept)
+        {
+            int dr = (int)c.r - k.r, dg = (int)c.g - k.g, db = (int)c.b - k.b;
+            int dist = dr*dr + dg*dg + db*db;
+            if (dist < bestDist) { bestDist = dist; best = k; }
+        }
+        return best;
+    };
+
+    // Replace colors in all frames
+    for (auto &frame : frames)
+    {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (PanelAt(x, y) != panel) continue;
+                if (!IsLedPosition(x, y)) continue;
+                Color c = frame.GetPixel(x, y, w);
+                if (c.IsBlack()) continue;
+                // Check if it's in the kept set
+                bool isKept = false;
+                for (const auto &k : kept)
+                    if (k == c) { isKept = true; break; }
+                if (!isKept)
+                    frame.SetPixel(x, y, w, Nearest(c));
+            }
+    }
 }
