@@ -65,6 +65,16 @@ void Preferences::Load(const std::string &path)
             if (k.contains("erase")) keys.erase = k["erase"];
             if (k.contains("fill")) keys.fill = k["fill"];
             if (k.contains("pick")) keys.pick = k["pick"];
+            if (k.contains("play_pause")) keys.playPause = k["play_pause"];
+            if (k.contains("prev_frame")) keys.prevFrame = k["prev_frame"];
+            if (k.contains("next_frame")) keys.nextFrame = k["next_frame"];
+            if (k.contains("first_frame")) keys.firstFrame = k["first_frame"];
+            if (k.contains("last_frame")) keys.lastFrame = k["last_frame"];
+            if (k.contains("add_frame")) keys.addFrame = k["add_frame"];
+            if (k.contains("dup_frame")) keys.dupFrame = k["dup_frame"];
+            if (k.contains("delete_frame")) keys.deleteFrame = k["delete_frame"];
+            if (k.contains("shift_left")) keys.shiftLeft = k["shift_left"];
+            if (k.contains("shift_right")) keys.shiftRight = k["shift_right"];
         }
     } catch (...) {
         // Ignore malformed config, use defaults
@@ -81,6 +91,16 @@ void Preferences::Save(const std::string &path) const
         {"erase", keys.erase},
         {"fill", keys.fill},
         {"pick", keys.pick},
+        {"play_pause", keys.playPause},
+        {"prev_frame", keys.prevFrame},
+        {"next_frame", keys.nextFrame},
+        {"first_frame", keys.firstFrame},
+        {"last_frame", keys.lastFrame},
+        {"add_frame", keys.addFrame},
+        {"dup_frame", keys.dupFrame},
+        {"delete_frame", keys.deleteFrame},
+        {"shift_left", keys.shiftLeft},
+        {"shift_right", keys.shiftRight},
     };
 
     std::ofstream f(path);

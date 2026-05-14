@@ -236,10 +236,26 @@ int main(int, char**)
                 }
             };
 
+            ImGui::Text("Tools");
+            ImGui::Separator();
             KeybindRow("Draw", &prefs.keys.draw);
             KeybindRow("Erase", &prefs.keys.erase);
             KeybindRow("Fill", &prefs.keys.fill);
             KeybindRow("Pick Color", &prefs.keys.pick);
+
+            ImGui::Spacing();
+            ImGui::Text("Timeline");
+            ImGui::Separator();
+            KeybindRow("Play/Pause", &prefs.keys.playPause);
+            KeybindRow("Prev Frame", &prefs.keys.prevFrame);
+            KeybindRow("Next Frame", &prefs.keys.nextFrame);
+            KeybindRow("First Frame", &prefs.keys.firstFrame);
+            KeybindRow("Last Frame", &prefs.keys.lastFrame);
+            KeybindRow("Add Frame", &prefs.keys.addFrame);
+            KeybindRow("Dup Frame", &prefs.keys.dupFrame);
+            KeybindRow("Delete Frame", &prefs.keys.deleteFrame);
+            KeybindRow("Shift Left", &prefs.keys.shiftLeft);
+            KeybindRow("Shift Right", &prefs.keys.shiftRight);
 
             ImGui::Separator();
             if (ImGui::Button("Reset to Defaults"))
@@ -602,10 +618,38 @@ int main(int, char**)
             // Arrow key navigation (when not typing)
             if (!io.WantTextInput && !playing)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) && canvas.currentFrame > 0)
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.prevFrame) && canvas.currentFrame > 0)
                     canvas.currentFrame--;
-                if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) && canvas.currentFrame < totalFrames - 1)
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.nextFrame) && canvas.currentFrame < totalFrames - 1)
                     canvas.currentFrame++;
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.firstFrame))
+                    canvas.currentFrame = 0;
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.lastFrame))
+                    canvas.currentFrame = totalFrames - 1;
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.addFrame))
+                    { canvas.AddFrame(); canvas.currentFrame = (int)canvas.frames.size() - 1; }
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.dupFrame))
+                    canvas.DuplicateFrame(canvas.currentFrame);
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.deleteFrame) && totalFrames > 1)
+                    canvas.DeleteFrame(canvas.currentFrame);
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.shiftLeft) && canvas.currentFrame > 0)
+                {
+                    std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame - 1]);
+                    canvas.currentFrame--;
+                }
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.shiftRight) && canvas.currentFrame < totalFrames - 1)
+                {
+                    std::swap(canvas.frames[canvas.currentFrame], canvas.frames[canvas.currentFrame + 1]);
+                    canvas.currentFrame++;
+                }
+            }
+            if (!io.WantTextInput)
+            {
+                if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.playPause))
+                {
+                    playing = !playing;
+                    if (playing) lastFrameTime = ImGui::GetTime();
+                }
             }
 
             ImGui::Separator();
