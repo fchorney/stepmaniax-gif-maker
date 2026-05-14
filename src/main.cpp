@@ -257,7 +257,16 @@ int main(int, char**)
                     { canvas.AddFrame(); undo.SaveState(canvas, "Add Frame"); }
                 if (ImGui::MenuItem("Delete Frame", nullptr, false, (int)canvas.frames.size() > 1))
                     { canvas.DeleteFrame(canvas.currentFrame); undo.SaveState(canvas, "Delete Frame"); }
-                if (ImGui::MenuItem("Set Loop Point")) {}
+                if (ImGui::MenuItem("Set Loop Point"))
+                {
+                    canvas.loopFrame = canvas.currentFrame;
+                    undo.SaveState(canvas, "Set Loop Point");
+                }
+                if (ImGui::MenuItem("Clear Loop Point", nullptr, false, canvas.loopFrame != 0))
+                {
+                    canvas.loopFrame = 0;
+                    undo.SaveState(canvas, "Clear Loop Point");
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Hardware"))
@@ -813,7 +822,7 @@ int main(int, char**)
         // --- Preview ---
         ImGui::Begin("Preview");
         {
-            static bool hwColors = true;
+            static bool hwColors = false;
             static float previewZoom = 6.0f;
             static bool previewPlaying = false;
             static double previewLastTime = 0;
@@ -845,7 +854,9 @@ int main(int, char**)
                 if (now - previewLastTime >= dur)
                 {
                     previewLastTime = now;
-                    previewFrame = (previewFrame + 1) % totalFrames;
+                    previewFrame++;
+                    if (previewFrame >= totalFrames)
+                        previewFrame = canvas.loopFrame;
                 }
             }
 
@@ -1017,7 +1028,9 @@ int main(int, char**)
                 if (now - lastFrameTime >= frameDur)
                 {
                     lastFrameTime = now;
-                    canvas.currentFrame = (canvas.currentFrame + 1) % totalFrames;
+                    canvas.currentFrame++;
+                    if (canvas.currentFrame >= totalFrames)
+                        canvas.currentFrame = canvas.loopFrame;
                 }
             }
 
@@ -1034,6 +1047,13 @@ int main(int, char**)
             {
                 if (ImGui::Button("Pause"))
                     playing = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Restart"))
+            {
+                canvas.currentFrame = 0;
+                playing = true;
+                lastFrameTime = ImGui::GetTime();
             }
             ImGui::SameLine();
             if (ImGui::Button("|<"))
@@ -1082,17 +1102,33 @@ int main(int, char**)
                 ImGui::Text("(%d/%d max)", totalFrames, Canvas::MaxFrames);
 
             // Per-frame duration
-            float durMs = canvas.CurrentFrame().duration * 1000.0f;
+            static int editingDurFrame = -1;
+            if (editingDurFrame < 0 || editingDurFrame >= (int)canvas.frames.size())
+                editingDurFrame = canvas.currentFrame;
+            float durMs = canvas.frames[editingDurFrame].duration * 1000.0f;
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80);
             if (ImGui::InputFloat("ms##dur", &durMs, 0, 0, "%.0f"))
             {
                 if (durMs < 10) durMs = 10;
                 if (durMs > 2550) durMs = 2550;
-                canvas.CurrentFrame().duration = durMs / 1000.0f;
+                canvas.frames[editingDurFrame].duration = durMs / 1000.0f;
             }
+            if (ImGui::IsItemActive())
+                editingDurFrame = editingDurFrame; // keep locked while editing
+            else
+                editingDurFrame = canvas.currentFrame; // follow current frame when not editing
             if (ImGui::IsItemDeactivatedAfterEdit())
                 undo.SaveState(canvas, "Duration");
+            ImGui::SameLine();
+            if (ImGui::Button("All##dur"))
+            {
+                float d = canvas.frames[editingDurFrame].duration;
+                for (auto &f : canvas.frames) f.duration = d;
+                undo.SaveState(canvas, "Duration (all)");
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Set all frames to this duration");
 
             // Arrow key navigation (when not typing)
             if (!io.WantTextInput && !playing)
@@ -1158,6 +1194,18 @@ int main(int, char**)
                         ImVec2(pos.x + thumbW + 2, pos.y + thumbH + 2),
                         IM_COL32(255, 200, 0, 255), 0, 0, 2.0f);
 
+                // Loop point marker (triangle below frame)
+                if (f == canvas.loopFrame)
+                {
+                    float cx = pos.x + thumbW * 0.5f;
+                    float ty = pos.y + thumbH + 2;
+                    draw->AddTriangleFilled(
+                        ImVec2(cx - 5, ty + 8),
+                        ImVec2(cx + 5, ty + 8),
+                        ImVec2(cx, ty),
+                        IM_COL32(0, 200, 255, 220));
+                }
+
                 // Draw thumbnail
                 const auto &frame = canvas.frames[f];
                 for (int y = 0; y < h; y++)
@@ -1176,6 +1224,28 @@ int main(int, char**)
                 // Clickable area
                 if (ImGui::InvisibleButton("##thumb", ImVec2(thumbW, thumbH)))
                     canvas.currentFrame = f;
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                    ImGui::OpenPopup("##frame_ctx");
+                if (ImGui::BeginPopup("##frame_ctx"))
+                {
+                    if (canvas.loopFrame == f)
+                    {
+                        if (ImGui::MenuItem("Clear Loop Point"))
+                        {
+                            canvas.loopFrame = 0;
+                            undo.SaveState(canvas, "Clear Loop Point");
+                        }
+                    }
+                    else
+                    {
+                        if (ImGui::MenuItem("Set Loop Point"))
+                        {
+                            canvas.loopFrame = f;
+                            undo.SaveState(canvas, "Set Loop Point");
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
 
                 ImGui::SameLine();
                 ImGui::PopID();

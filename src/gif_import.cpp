@@ -159,5 +159,27 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError)
     canvas.mode = mode;
     canvas.frames = std::move(state.frames);
     canvas.currentFrame = 0;
+
+    // Detect loop frame marker: bottom-left pixel (0, h-1) with R >= 128
+    canvas.loopFrame = 0;
+    for (int f = 0; f < (int)canvas.frames.size(); f++)
+    {
+        Color c = canvas.frames[f].GetPixel(0, h - 1, w);
+        if (c.r >= 128)
+        {
+            canvas.loopFrame = f;
+            // Clear the marker pixel so it doesn't show in the editor
+            canvas.frames[f].SetPixel(0, h - 1, w, Color{0, 0, 0});
+            break;
+        }
+    }
+
+    // Clear non-LED pixels (gutters, flag row, non-sampled positions)
+    for (auto &frame : canvas.frames)
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (!canvas.IsLedPosition(x, y))
+                    frame.SetPixel(x, y, w, Color{0, 0, 0});
+
     return true;
 }

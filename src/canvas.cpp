@@ -22,6 +22,7 @@ void Canvas::Init(CanvasMode m)
     mode = m;
     frames.clear();
     currentFrame = 0;
+    loopFrame = 0;
     AddFrame();
 }
 

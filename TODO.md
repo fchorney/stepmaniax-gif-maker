@@ -6,9 +6,9 @@
 - [x] Draw/Erase/Fill/Pick tools
 - [x] Color palette with per-panel color count warnings
 - [x] Timeline with play/pause, frame navigation, add/dup/delete/reorder
-- [x] Per-frame duration editing
+- [x] Per-frame duration editing (with "All" button to apply to all frames)
 - [x] GIF export (custom encoder, exact palettes)
-- [x] GIF import (gif_load.h from SDK)
+- [x] GIF import (gif_load.h from SDK, strips non-LED pixels)
 - [x] Undo/redo (snapshot-based, configurable history size)
 - [x] History panel (visual, clickable)
 - [x] Keyboard shortcuts (remappable, saved to preferences)
@@ -22,43 +22,31 @@
 - [x] Copy/paste panel
 - [x] Right-click context menu with panel detection
 - [x] Hardware color preview (66% scaling toggle)
+- [x] Preview panel: LED circles, panel outlines, dark background, zoom, independent playback
+- [x] Unsaved changes prompt (New/Import/Quit) with settings toggle
+- [x] Loop frame marker (set/clear via menu + right-click, visual indicator, export/import)
+- [x] Preview and timeline playback respect loop point
+- [x] Restart button for playback from frame 0
 
 ## Up Next
 
-### .smxgifs Project Files
-- Save/load full projects as ZIP archives (.smxgifs extension)
-- Contains: pad1_released.gif, pad1_pressed.gif, pad2_released.gif, pad2_pressed.gif, metadata.json
-- Metadata: mode, loop frames, project settings
-- File → Save / File → Open .smxgifs
-
-### Multi-Pad Support
-- Tab-based UI: "Pad 1 | Pad 2" with "Released | Pressed" toggle
-- Each tab has its own canvas (independent animations)
-- Side-by-side preview of both pads animating independently
-
-### Preview Panel Improvements
-- Render LEDs at physical positions (circles, not just pixels)
-- Show panel outlines like the physical pad shape
-- Adjustable preview zoom
-- Animate preview in real-time (independent of timeline scrubbing)
-
-### Loop Frame Marker
-- UI to set which frame is the loop point
-- Visual indicator on timeline (loop arrow icon)
-- Write the white pixel marker on export
-
 ### Hardware Features (requires connected pad)
 - Live preview via SMX_SetLights2 (drive LEDs directly from editor)
+- Load released + pressed GIFs for composite preview with pad input
 - Firmware upload via SMX_LightsUpload_PrepareUpload + BeginUpload
 - Connection status indicator
 - Block upload if >15 colors per panel
 
 ### Polish / Nice-to-Have
+- Rework File menu: "Open" (import), "Save" (overwrite current file), "Save As" (save to new path) — replaces Import/Export GIF
 - Onion skinning (ghost of previous/next frame)
 - Copy/paste entire frames
 - Custom theming (fonts, accent colors)
-- Confirmation dialog on Import GIF (warns about discarding current work)
 - Recent files list
 - Drag-and-drop GIF import
 - Window title shows current file name
-- Dirty state indicator (unsaved changes)
+- Dirty state indicator (asterisk in title)
+
+## Shelved (revisit if needed)
+- .smxgifs project files (not needed — editor works on single GIFs, hardware preview can load released+pressed separately)
+- Multi-pad support (pads are independent, no benefit to editing both simultaneously)

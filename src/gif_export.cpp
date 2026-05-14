@@ -172,6 +172,18 @@ bool ExportGif(const Canvas &canvas, const std::string &path, std::string &outEr
 
     // Build global palette
     auto palette = BuildGlobalPalette(canvas);
+
+    // Ensure white is in the palette for the loop marker
+    Color white = {255, 255, 255};
+    if (canvas.loopFrame > 0)
+    {
+        bool hasWhite = false;
+        for (const auto &c : palette)
+            if (c == white) { hasWhite = true; break; }
+        if (!hasWhite)
+            palette.push_back(white);
+    }
+
     if (palette.size() > 256)
     {
         outError = "Too many unique colors across all frames (max 256 for GIF).";
@@ -255,6 +267,10 @@ bool ExportGif(const Canvas &canvas, const std::string &path, std::string &outEr
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
                 indices[y * w + x] = FindIndex(palette, frame.GetPixel(x, y, w));
+
+        // Write loop marker: bottom-left pixel = white on the loop frame
+        if (f == canvas.loopFrame && canvas.loopFrame > 0)
+            indices[(h - 1) * w + 0] = FindIndex(palette, Color{255, 255, 255});
 
         // Write LZW data
         int minCodeSize = palBits;

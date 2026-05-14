@@ -29,6 +29,7 @@ struct Canvas {
     CanvasMode mode = CanvasMode::Modern;
     std::vector<CanvasFrame> frames;
     int currentFrame = 0;
+    int loopFrame = 0; // frame to loop back to (0 = loop from start)
 
     int Width() const { return mode == CanvasMode::Modern ? 23 : 14; }
     int Height() const { return mode == CanvasMode::Modern ? 24 : 15; }
