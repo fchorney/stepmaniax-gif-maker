@@ -1,5 +1,6 @@
 #include "preferences.h"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <fstream>
 #include <cstdlib>
 #include <sys/stat.h>
@@ -112,4 +113,17 @@ void Preferences::Save(const std::string &path) const
     std::ofstream f(path);
     if (f.is_open())
         f << j.dump(2) << "\n";
+}
+
+void Preferences::AddRecentFile(const std::string &filePath)
+{
+    // Remove if already in list
+    recentFiles.erase(
+        std::remove(recentFiles.begin(), recentFiles.end(), filePath),
+        recentFiles.end());
+    // Insert at front
+    recentFiles.insert(recentFiles.begin(), filePath);
+    // Keep max 20
+    if (recentFiles.size() > 20)
+        recentFiles.resize(20);
 }

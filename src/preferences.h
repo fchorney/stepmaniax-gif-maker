@@ -37,6 +37,7 @@ struct Preferences {
 
     void Load(const std::string &path);
     void Save(const std::string &path) const;
+    void AddRecentFile(const std::string &filePath);
 };
 
 // Returns the platform-specific config directory, creating it if needed.

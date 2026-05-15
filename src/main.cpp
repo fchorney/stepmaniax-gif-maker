@@ -9,9 +9,11 @@
 #include "undo.h"
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <algorithm>
 #include <fstream>
 #include <set>
 #include <vector>
+#include <sys/stat.h>
 
 enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Replace, Tool_Pick };
 
@@ -24,7 +26,7 @@ static bool g_importRequested = false;
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
-    if (filelist && filelist[0])
+    if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_exportPath = filelist[0];
         g_exportRequested = true;
@@ -218,6 +220,54 @@ int main(int, char**)
                         SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
                         SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
                     }
+                }
+                if (ImGui::BeginMenu("Open Recent", !prefs.recentFiles.empty()))
+                {
+                    for (const auto &recent : prefs.recentFiles)
+                    {
+                        // Show parent_dir/filename for disambiguation
+                        std::string display;
+                        size_t sep = recent.find_last_of("/\\");
+                        if (sep != std::string::npos)
+                        {
+                            size_t sep2 = recent.find_last_of("/\\", sep - 1);
+                            display = (sep2 != std::string::npos) ? recent.substr(sep2 + 1) : recent.substr(0, sep) + "/" + recent.substr(sep + 1);
+                        }
+                        else
+                            display = recent;
+                        struct stat st;
+                        bool exists = (stat(recent.c_str(), &st) == 0);
+                        if (ImGui::MenuItem(display.c_str(), nullptr, false, exists))
+                        {
+                            if (prefs.promptOnUnsaved && dirty)
+                            {
+                                g_importPath = recent;
+                                pendingAction = Pending_Import;
+                                showUnsavedDialog = true;
+                            }
+                            else
+                            {
+                                g_importPath = recent;
+                                g_importRequested = true;
+                            }
+                        }
+                        if (ImGui::BeginItemTooltip()) {
+                            ImGui::Text("%s", recent.c_str());
+                            if (!exists) ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(file not found)");
+                            ImGui::EndTooltip();
+                        }
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Remove Missing Files"))
+                    {
+                        prefs.recentFiles.erase(
+                            std::remove_if(prefs.recentFiles.begin(), prefs.recentFiles.end(),
+                                [](const std::string &f) { struct stat st; return stat(f.c_str(), &st) != 0; }),
+                            prefs.recentFiles.end());
+                    }
+                    if (ImGui::MenuItem("Clear Recent Files"))
+                        prefs.recentFiles.clear();
+                    ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Save", SHORTCUT_MOD "+S", false, !currentFilePath.empty()))
@@ -422,20 +472,30 @@ int main(int, char**)
         {
             g_exportRequested = false;
             std::string path = g_exportPath;
-            if (path.size() < 4 || path.substr(path.size() - 4) != ".gif")
-                path += ".gif";
-            exportSuccess = ExportGif(canvas, path, exportError);
-            if (exportSuccess)
+            if (!path.empty())
             {
-                currentFilePath = path;
-                dirty = false; undo.MarkSaved();
+                if (path.size() < 4 || path.substr(path.size() - 4) != ".gif")
+                    path += ".gif";
+                exportSuccess = ExportGif(canvas, path, exportError);
+                if (exportSuccess)
+                {
+                    currentFilePath = path;
+                    prefs.AddRecentFile(path);
+                    dirty = false; undo.MarkSaved();
+                }
+                showExportResult = true;
             }
-            showExportResult = true;
         }
 
         if (showExportWarning)
         {
-            ImGui::OpenPopup("Save Warning");
+            // Verify the warning is still valid (canvas may have changed)
+            bool stillOverLimit = false;
+            for (int p = 0; p < 9; p++)
+                if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                    stillOverLimit = true;
+            if (stillOverLimit)
+                ImGui::OpenPopup("Save Warning");
             showExportWarning = false;
         }
         if (ImGui::BeginPopupModal("Save Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -443,26 +503,11 @@ int main(int, char**)
             if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
             ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
-            int w = canvas.Width(), h = canvas.Height();
-            for (int f = 0; f < (int)canvas.frames.size(); f++)
+            for (int p = 0; p < 9; p++)
             {
-                for (int p = 0; p < 9; p++)
-                {
-                    // Count colors for this panel on this frame
-                    std::set<uint32_t> colors;
-                    const auto &frame = canvas.frames[f];
-                    for (int y = 0; y < h; y++)
-                        for (int x = 0; x < w; x++)
-                        {
-                            if (canvas.PanelAt(x, y) != p) continue;
-                            if (!canvas.IsLedPosition(x, y)) continue;
-                            Color c = frame.GetPixel(x, y, w);
-                            if (c.IsBlack()) continue;
-                            colors.insert((uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b);
-                        }
-                    if ((int)colors.size() > 15)
-                        ImGui::Text("Frame %d, Panel %d: %d colors", f + 1, p, (int)colors.size());
-                }
+                int count = canvas.ColorCountForPanelAllFrames(p);
+                if (count > 15)
+                    ImGui::Text("Panel %d: %d colors (across all frames)", p, count);
             }
             ImGui::EndChild();
             ImGui::Separator();
@@ -557,6 +602,8 @@ int main(int, char**)
             if (importSuccess)
             {
                 currentFilePath = g_importPath;
+                prefs.AddRecentFile(g_importPath);
+                showExportWarning = false;
                 undo.Clear();
                 undo.SaveState(canvas, "Open");
                 if (pixelsModified)
@@ -749,10 +796,10 @@ int main(int, char**)
             ImGui::ColorPicker3("##color", (float *)&currentColor,
                 ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview);
             ImGui::Separator();
-            ImGui::Text("Panel Colors (frame %d):", canvas.currentFrame + 1);
+            ImGui::Text("Panel Colors (all frames):");
             for (int p = 0; p < 9; p++)
             {
-                int count = canvas.ColorCountForPanel(p);
+                int count = canvas.ColorCountForPanelAllFrames(p);
                 if (count > 15)
                     ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "  Panel %d: %d/15 (!)", p, count);
                 else

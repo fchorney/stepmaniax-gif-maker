@@ -4,7 +4,7 @@
 - [x] Project scaffolding (ImGui + SDL3 + SDK)
 - [x] Pixel grid canvas with LED-only editing
 - [x] Draw/Erase/Fill/Replace/Pick tools
-- [x] Color palette with per-panel color count warnings
+- [x] Color palette with per-panel color count (all frames, matches firmware constraint)
 - [x] Timeline with play/pause, frame navigation, add/dup/delete/reorder
 - [x] Per-frame duration editing (with "All" button, locked to frame while editing)
 - [x] GIF export (custom encoder, exact palettes, loop marker)
@@ -17,8 +17,8 @@
 - [x] Default window layout
 - [x] Mode selection (Legacy/Modern) via New dialog
 - [x] 32-frame hard limit enforcement (buttons disabled at limit)
-- [x] Save color warning with per-frame/panel detail + Quantize & Save option
-- [x] Quantize panel/all (nearest-neighbor, undoable)
+- [x] Save color warning with per-panel all-frames detail + Quantize & Save option
+- [x] Quantize panel/all (nearest-neighbor across all frames, undoable)
 - [x] Copy/paste panel (right-click canvas menu)
 - [x] Copy/paste entire frames (Ctrl+C/V, right-click timeline, Edit menu)
 - [x] Right-click context menu with panel detection (works on non-LED spots too)
@@ -41,6 +41,8 @@
 - [x] Keyboard navigation in modal dialogs (arrow keys, Enter to confirm)
 - [x] Shortcuts blocked when popups are open
 - [x] Color limit check on all save paths (Save, Save As, shortcuts)
+- [x] Recent files list (max 20, parent_dir/filename display, grayed missing files, remove/clear options)
+- [x] Cancel save dialog no longer creates empty .gif file
 
 ## Up Next
 
@@ -54,9 +56,8 @@
 ### Polish / Nice-to-Have
 - Onion skinning (ghost of previous/next frame)
 - Custom theming (fonts, accent colors)
-- Recent files list
-- Drag-and-drop GIF import
 
 ## Shelved (revisit if needed)
 - .smxgifs project files (not needed — editor works on single GIFs, hardware preview can load released+pressed separately)
 - Multi-pad support (pads are independent, no benefit to editing both simultaneously)
+- Drag-and-drop GIF import (low priority, can add if requested)
