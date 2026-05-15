@@ -261,7 +261,7 @@ int main(int, char**)
                 if (ImGui::MenuItem("Open...", SHORTCUT_MOD "+O"))
                 {
                     if (prefs.promptOnUnsaved && dirty)
-                        { pendingAction = Pending_Import; showUnsavedDialog = true; }
+                        { g_importPath.clear(); pendingAction = Pending_Import; showUnsavedDialog = true; }
                     else
                     {
                         SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
@@ -942,7 +942,7 @@ int main(int, char**)
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O))
             {
                 if (prefs.promptOnUnsaved && dirty)
-                    { pendingAction = Pending_Import; showUnsavedDialog = true; }
+                    { g_importPath.clear(); pendingAction = Pending_Import; showUnsavedDialog = true; }
                 else
                 {
                     SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
