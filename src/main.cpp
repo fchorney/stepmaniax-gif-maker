@@ -805,11 +805,19 @@ int main(int, char**)
             }
             else if (uploadProgress >= 100)
             {
-                ImGui::SetNavCursorVisible(true);
+                static bool uploadFocusSet = false;
                 ImGui::Text("Upload complete!");
                 if (ImGui::Button("OK"))
+                {
+                    uploadFocusSet = false;
                     ImGui::CloseCurrentPopup();
-                ImGui::SetItemDefaultFocus();
+                }
+                if (!uploadFocusSet)
+                {
+                    ImGui::SetKeyboardFocusHere(-1);
+                    ImGui::SetNavCursorVisible(true);
+                    uploadFocusSet = true;
+                }
             }
             else
             {
