@@ -1033,7 +1033,7 @@ int main(int, char**)
             bool canvasActive = ImGui::IsItemActive();
 
             // Ctrl+scroll to zoom canvas
-            if (canvasHovered && io.KeyCtrl && io.MouseWheel != 0)
+            if (canvasHovered && (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && io.MouseWheel != 0)
             {
                 cellSize += io.MouseWheel * 2.0f;
                 if (cellSize < 8.0f) cellSize = 8.0f;
@@ -1455,7 +1455,7 @@ int main(int, char**)
             ImGui::Dummy(ImVec2(totalSize, totalSize));
 
             // Ctrl+scroll to zoom preview
-            if (ImGui::IsItemHovered() && io.KeyCtrl && io.MouseWheel != 0)
+            if (ImGui::IsItemHovered() && (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && io.MouseWheel != 0)
             {
                 previewZoom += io.MouseWheel * 1.0f;
                 if (previewZoom < 3.0f) previewZoom = 3.0f;
