@@ -144,28 +144,6 @@ bool Canvas::IsLedPosition(int x, int y) const
     }
 }
 
-int Canvas::ColorCountForPanel(int panel) const
-{
-    if (panel < 0 || panel > 8) return 0;
-    const auto &frame = CurrentFrame();
-    int w = Width();
-    int h = Height();
-
-    std::set<uint32_t> colors;
-    for (int y = 0; y < h; y++)
-    {
-        for (int x = 0; x < w; x++)
-        {
-            if (PanelAt(x, y) != panel) continue;
-            if (!IsLedPosition(x, y)) continue;
-            Color c = frame.GetPixel(x, y, w);
-            if (c.IsBlack()) continue;
-            colors.insert((uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b);
-        }
-    }
-    return (int)colors.size();
-}
-
 void Canvas::ClearPanel(int panel)
 {
     if (panel < 0 || panel > 8) return;

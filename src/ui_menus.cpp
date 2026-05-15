@@ -684,8 +684,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
         if (app.compositePressedLoaded)
+        {
             ImGui::Checkbox("Fill black pixels (fully replace released)", &app.compositeFillBlack);
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Black pixels become opaque instead of transparent\nso pressed animation fully covers released"); ImGui::EndTooltip(); }
+        }
 
         ImGui::Separator();
         if (!app.compositePreview)

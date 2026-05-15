@@ -54,9 +54,6 @@ struct Canvas {
     // Returns true if (x, y) is an LED-sampled position (visible on hardware).
     bool IsLedPosition(int x, int y) const;
 
-    // Count unique non-black colors used in a panel for the current frame.
-    int ColorCountForPanel(int panel) const;
-
     // Count unique non-black colors used in a panel across ALL frames.
     int ColorCountForPanelAllFrames(int panel) const;
 
