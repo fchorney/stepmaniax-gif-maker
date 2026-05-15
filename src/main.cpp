@@ -10,6 +10,7 @@
 #include <SMX.h>
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <cstring>
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -18,7 +19,11 @@
 
 enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Replace, Tool_Pick };
 
-// File dialog state
+// SMX SDK callback (unused, but required)
+static void SMXUpdateCb(int pad, SMXUpdateCallbackReason reason, void *pUser)
+{
+    (void)pad; (void)reason; (void)pUser;
+}
 static std::string g_exportPath;
 static bool g_exportRequested = false;
 static std::string g_importPath;
@@ -79,7 +84,7 @@ int main(int, char**)
     }
 
     // Initialize SMX SDK
-    SMX_Start(nullptr, nullptr);
+    SMX_Start(SMXUpdateCb, nullptr);
 
     SDL_Window *window = SDL_CreateWindow(
         "StepManiaX GIF Maker", 1280, 720,
@@ -166,6 +171,12 @@ int main(int, char**)
     // File state
     std::string currentFilePath;
     bool dirty = false;
+
+    // Live hardware preview state
+    bool livePreview = false;
+    double livePreviewLastSend = 0;
+    double livePreviewFrameTime = 0;
+    int livePreviewFrame = 0;
 
     bool running = true;
     while (running)
@@ -385,7 +396,18 @@ int main(int, char**)
                 else
                     ImGui::TextDisabled("Pad 2: Not connected");
                 ImGui::Separator();
-                if (ImGui::MenuItem("Preview on Pad", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
+                if (ImGui::MenuItem("Preview on Pad", nullptr, livePreview, info0.m_bConnected || info1.m_bConnected))
+                {
+                    livePreview = !livePreview;
+                    if (livePreview)
+                    {
+                        livePreviewLastSend = 0;
+                        livePreviewFrameTime = 0;
+                        livePreviewFrame = 0;
+                    }
+                    else
+                        SMX_ReenableAutoLights();
+                }
                 if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
                 ImGui::Separator();
                 if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
@@ -1626,6 +1648,97 @@ int main(int, char**)
                 ImGui::TextDisabled("(%d max)", Canvas::MaxFrames);
         }
         ImGui::End();
+
+        // --- Live Hardware Preview ---
+        if (livePreview)
+        {
+            double now = ImGui::GetTime();
+            if (now - livePreviewLastSend >= 1.0 / 30.0)
+            {
+                livePreviewLastSend = now;
+
+                // Advance animation based on frame duration
+                int totalFrames = (int)canvas.frames.size();
+                if (totalFrames > 1)
+                {
+                    livePreviewFrameTime += 1.0 / 30.0;
+                    float dur = canvas.frames[livePreviewFrame].duration;
+                    if (livePreviewFrameTime >= dur)
+                    {
+                        livePreviewFrameTime -= dur;
+                        livePreviewFrame++;
+                        if (livePreviewFrame >= totalFrames)
+                            livePreviewFrame = canvas.loopFrame;
+                    }
+                }
+
+                // Build light buffer (1350 bytes: 2 pads × 9 panels × 25 LEDs × 3 RGB)
+                char lightData[1350] = {};
+                const auto &frame = canvas.frames[livePreviewFrame < totalFrames ? livePreviewFrame : 0];
+                int w = canvas.Width();
+
+                // Fill pad 0 (first 675 bytes)
+                for (int panel = 0; panel < 9; panel++)
+                {
+                    int col = panel % 3;
+                    int row = panel / 3;
+                    int ledIdx = 0;
+
+                    if (canvas.mode == CanvasMode::Modern)
+                    {
+                        // Outer 4×4 at even coords
+                        for (int dy = 0; dy < 4; dy++)
+                            for (int dx = 0; dx < 4; dx++)
+                            {
+                                int px = col * 8 + dx * 2;
+                                int py = row * 8 + dy * 2;
+                                Color c = frame.GetPixel(px, py, w);
+                                int offset = panel * 75 + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                        // Inner 3×3 at odd coords
+                        for (int dy = 0; dy < 3; dy++)
+                            for (int dx = 0; dx < 3; dx++)
+                            {
+                                int px = col * 8 + dx * 2 + 1;
+                                int py = row * 8 + dy * 2 + 1;
+                                Color c = frame.GetPixel(px, py, w);
+                                int offset = panel * 75 + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                    }
+                    else
+                    {
+                        // Legacy: 4×4 at (col*5, row*5)
+                        for (int dy = 0; dy < 4; dy++)
+                            for (int dx = 0; dx < 4; dx++)
+                            {
+                                int px = col * 5 + dx;
+                                int py = row * 5 + dy;
+                                Color c = frame.GetPixel(px, py, w);
+                                int offset = panel * 48 + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                    }
+                }
+
+                // Send to both pads (pad 1 gets same data as pad 0 for now)
+                int size = (canvas.mode == CanvasMode::Modern) ? 1350 : 864;
+                // Copy pad 0 data to pad 1 slot
+                int padSize = size / 2;
+                memcpy(lightData + padSize, lightData, padSize);
+                SMX_SetLights2(lightData, size);
+            }
+        }
 
         // Update window title
         {
