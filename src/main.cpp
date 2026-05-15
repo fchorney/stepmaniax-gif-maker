@@ -7,6 +7,7 @@
 #include "gif_export.h"
 #include "gif_import.h"
 #include "undo.h"
+#include <SMX.h>
 #include <SDL3/SDL.h>
 #include <cstdio>
 #include <algorithm>
@@ -76,6 +77,9 @@ int main(int, char**)
         printf("SDL_Init error: %s\n", SDL_GetError());
         return 1;
     }
+
+    // Initialize SMX SDK
+    SMX_Start(nullptr, nullptr);
 
     SDL_Window *window = SDL_CreateWindow(
         "StepManiaX GIF Maker", 1280, 720,
@@ -368,10 +372,24 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Hardware"))
             {
-                if (ImGui::MenuItem("Preview on Pad")) {}
-                if (ImGui::MenuItem("Upload to Firmware")) {}
+                // Connection status
+                SMXInfo info0, info1;
+                SMX_GetInfo(0, &info0);
+                SMX_GetInfo(1, &info1);
+                if (info0.m_bConnected)
+                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Pad 1: Connected");
+                else
+                    ImGui::TextDisabled("Pad 1: Not connected");
+                if (info1.m_bConnected)
+                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Pad 2: Connected");
+                else
+                    ImGui::TextDisabled("Pad 2: Not connected");
                 ImGui::Separator();
-                if (ImGui::MenuItem("Re-enable Auto Lights")) {}
+                if (ImGui::MenuItem("Preview on Pad", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
+                if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
+                ImGui::Separator();
+                if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+                    SMX_ReenableAutoLights();
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -1640,6 +1658,7 @@ int main(int, char**)
     ImGui::DestroyContext();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    SMX_Stop();
     SDL_Quit();
     return 0;
 }
