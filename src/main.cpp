@@ -167,6 +167,7 @@ int main(int, char**)
     enum PendingAction { Pending_None = 0, Pending_New, Pending_Import, Pending_Quit };
     int pendingAction = Pending_None;
     bool showUnsavedDialog = false;
+    bool deferOpenDialog = false;
 
     // File state
     std::string currentFilePath;
@@ -174,6 +175,7 @@ int main(int, char**)
 
     // Live hardware preview state
     bool livePreview = false;
+    bool livePreviewSync = true; // true = sync to editor frame, false = play animation
     double livePreviewLastSend = 0;
     double livePreviewFrameTime = 0;
     int livePreviewFrame = 0;
@@ -207,6 +209,14 @@ int main(int, char**)
         ImGui::NewFrame();
 
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
+        // Deferred file open dialog (needs to happen after popups close)
+        if (deferOpenDialog)
+        {
+            deferOpenDialog = false;
+            SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+            SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+        }
 
         // Settings state (declared before menu bar which references it)
         static bool showSettings = false;
@@ -407,6 +417,17 @@ int main(int, char**)
                     }
                     else
                         SMX_ReenableAutoLights();
+                }
+                if (livePreview)
+                {
+                    if (ImGui::MenuItem("  Sync to Editor", nullptr, livePreviewSync))
+                        livePreviewSync = true;
+                    if (ImGui::MenuItem("  Play Animation", nullptr, !livePreviewSync))
+                    {
+                        livePreviewSync = false;
+                        livePreviewFrame = 0;
+                        livePreviewFrameTime = 0;
+                    }
                 }
                 if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
                 ImGui::Separator();
@@ -621,10 +642,7 @@ int main(int, char**)
                     if (!g_importPath.empty())
                         g_importRequested = true;
                     else
-                    {
-                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                        SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
-                    }
+                        deferOpenDialog = true;
                 }
                 else if (action == Pending_Quit)
                     running = false;
@@ -1657,9 +1675,9 @@ int main(int, char**)
             {
                 livePreviewLastSend = now;
 
-                // Advance animation based on frame duration
+                // Advance animation based on frame duration (play mode only)
                 int totalFrames = (int)canvas.frames.size();
-                if (totalFrames > 1)
+                if (!livePreviewSync && totalFrames > 1)
                 {
                     livePreviewFrameTime += 1.0 / 30.0;
                     float dur = canvas.frames[livePreviewFrame].duration;
@@ -1672,9 +1690,13 @@ int main(int, char**)
                     }
                 }
 
+                // Determine which frame to display
+                int displayFrame = livePreviewSync ? canvas.currentFrame : livePreviewFrame;
+                if (displayFrame >= totalFrames) displayFrame = 0;
+
                 // Build light buffer (1350 bytes: 2 pads × 9 panels × 25 LEDs × 3 RGB)
                 char lightData[1350] = {};
-                const auto &frame = canvas.frames[livePreviewFrame < totalFrames ? livePreviewFrame : 0];
+                const auto &frame = canvas.frames[displayFrame];
                 int w = canvas.Width();
 
                 // Fill pad 0 (first 675 bytes)
