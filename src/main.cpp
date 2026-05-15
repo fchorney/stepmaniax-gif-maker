@@ -178,6 +178,7 @@ int main(int, char**)
     int pendingAction = Pending_None;
     bool showUnsavedDialog = false;
     bool deferOpenDialog = false;
+    int deferOpenDialogFrames = 0;
 
     // File state
     std::string currentFilePath;
@@ -229,9 +230,14 @@ int main(int, char**)
         // Deferred file open dialog (needs to happen after popups close)
         if (deferOpenDialog)
         {
-            deferOpenDialog = false;
-            SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-            SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+            deferOpenDialogFrames++;
+            if (deferOpenDialogFrames >= 2)
+            {
+                deferOpenDialog = false;
+                deferOpenDialogFrames = 0;
+                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+            }
         }
 
         // Settings state (declared before menu bar which references it)
