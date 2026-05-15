@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <set>
 #include <vector>
@@ -24,6 +25,15 @@ static void SMXUpdateCb(int pad, SMXUpdateCallbackReason reason, void *pUser)
 {
     (void)pad; (void)reason; (void)pUser;
 }
+
+// Upload progress callback (called from SDK I/O thread)
+static std::atomic<int> g_uploadProgress{0};
+static void UploadProgressCb(int progress, void *pUser)
+{
+    (void)pUser;
+    g_uploadProgress.store(progress);
+}
+
 static std::string g_exportPath;
 static bool g_exportRequested = false;
 static std::string g_importPath;
@@ -179,6 +189,12 @@ int main(int, char**)
     double livePreviewLastSend = 0;
     double livePreviewFrameTime = 0;
     int livePreviewFrame = 0;
+
+    // Firmware upload state
+    static bool uploadInProgress = false;
+    static int uploadProgress = 0;
+    static bool showUploadDialog = false;
+    static std::string uploadError;
 
     bool running = true;
     while (running)
@@ -429,7 +445,65 @@ int main(int, char**)
                         livePreviewFrameTime = 0;
                     }
                 }
-                if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected)) {}
+                if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+                {
+                    // Validate
+                    if (canvas.mode != CanvasMode::Modern)
+                        uploadError = "Upload requires Modern (23x24) mode.";
+                    else if ((int)canvas.frames.size() > 32)
+                        uploadError = "Too many frames (max 32).";
+                    else
+                    {
+                        bool overLimit = false;
+                        for (int p = 0; p < 9; p++)
+                            if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                                overLimit = true;
+                        if (overLimit)
+                            uploadError = "One or more panels exceed 15 colors.";
+                        else
+                            uploadError.clear();
+                    }
+
+                    if (!uploadError.empty())
+                        showUploadDialog = true;
+                    else
+                    {
+                        // Export to memory and prepare upload
+                        std::vector<char> gifData;
+                        std::string err;
+                        if (ExportGifToMemory(canvas, gifData, err))
+                        {
+                            const char *prepErr = nullptr;
+                            bool ok = true;
+                            if (info0.m_bConnected)
+                            {
+                                if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 0, SMX_LightsType_Released, &prepErr))
+                                { uploadError = prepErr ? prepErr : "Prepare failed for pad 1."; ok = false; }
+                            }
+                            if (ok && info1.m_bConnected)
+                            {
+                                if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 1, SMX_LightsType_Released, &prepErr))
+                                { uploadError = prepErr ? prepErr : "Prepare failed for pad 2."; ok = false; }
+                            }
+                            if (ok)
+                            {
+                                uploadInProgress = true;
+                                g_uploadProgress.store(0);
+                                if (info0.m_bConnected)
+                                    SMX_LightsUpload_BeginUpload(0, UploadProgressCb, nullptr);
+                                if (info1.m_bConnected)
+                                    SMX_LightsUpload_BeginUpload(1, UploadProgressCb, nullptr);
+                            }
+                            else
+                                showUploadDialog = true;
+                        }
+                        else
+                        {
+                            uploadError = "Failed to encode GIF: " + err;
+                            showUploadDialog = true;
+                        }
+                    }
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
                     SMX_ReenableAutoLights();
@@ -697,6 +771,44 @@ int main(int, char**)
             if (ImGui::Button("OK"))
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
+            ImGui::EndPopup();
+        }
+
+        // --- Upload Dialog ---
+        if (showUploadDialog)
+        {
+            ImGui::OpenPopup("Upload");
+            showUploadDialog = false;
+        }
+        if (uploadInProgress)
+        {
+            ImGui::OpenPopup("Upload");
+            uploadProgress = g_uploadProgress.load();
+            if (uploadProgress >= 100)
+                uploadInProgress = false;
+        }
+        if (ImGui::BeginPopupModal("Upload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
+            if (!uploadError.empty())
+            {
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Upload failed: %s", uploadError.c_str());
+                if (ImGui::Button("OK"))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SetItemDefaultFocus();
+            }
+            else if (uploadProgress >= 100)
+            {
+                ImGui::Text("Upload complete!");
+                if (ImGui::Button("OK"))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SetItemDefaultFocus();
+            }
+            else
+            {
+                ImGui::Text("Uploading to firmware...");
+                ImGui::ProgressBar(uploadProgress / 100.0f);
+            }
             ImGui::EndPopup();
         }
 

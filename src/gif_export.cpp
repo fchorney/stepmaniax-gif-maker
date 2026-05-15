@@ -12,14 +12,19 @@ namespace {
 
 struct GifWriter {
     FILE *fp = nullptr;
+    std::vector<char> *buf = nullptr;
 
     bool Open(const std::string &path) {
         fp = fopen(path.c_str(), "wb");
         return fp != nullptr;
     }
-    void Write(const void *data, size_t size) { fwrite(data, 1, size, fp); }
-    void WriteByte(uint8_t b) { fwrite(&b, 1, 1, fp); }
-    void WriteU16(uint16_t v) { fwrite(&v, 2, 1, fp); } // little-endian
+    void OpenMemory(std::vector<char> *outBuf) { buf = outBuf; buf->clear(); }
+    void Write(const void *data, size_t size) {
+        if (fp) fwrite(data, 1, size, fp);
+        else if (buf) buf->insert(buf->end(), (const char*)data, (const char*)data + size);
+    }
+    void WriteByte(uint8_t b) { Write(&b, 1); }
+    void WriteU16(uint16_t v) { Write(&v, 2); } // little-endian
     void Close() { if (fp) fclose(fp); fp = nullptr; }
 };
 
@@ -281,5 +286,88 @@ bool ExportGif(const Canvas &canvas, const std::string &path, std::string &outEr
     // --- Trailer ---
     gw.WriteByte(0x3B);
     gw.Close();
+    return true;
+}
+
+bool ExportGifToMemory(const Canvas &canvas, std::vector<char> &outData, std::string &outError)
+{
+    if (canvas.frames.empty())
+    {
+        outError = "No frames to export.";
+        return false;
+    }
+
+    int w = canvas.Width();
+    int h = canvas.Height();
+
+    auto palette = BuildGlobalPalette(canvas);
+    Color white = {255, 255, 255};
+    if (canvas.loopFrame > 0)
+    {
+        bool hasWhite = false;
+        for (const auto &c : palette)
+            if (c == white) { hasWhite = true; break; }
+        if (!hasWhite)
+            palette.push_back(white);
+    }
+
+    if (palette.size() > 256)
+    {
+        outError = "Too many unique colors across all frames (max 256 for GIF).";
+        return false;
+    }
+
+    int palBits = PaletteBits((int)palette.size());
+    int palSize = 1 << palBits;
+
+    GifWriter gw;
+    gw.OpenMemory(&outData);
+
+    gw.Write("GIF89a", 6);
+    gw.WriteU16((uint16_t)w);
+    gw.WriteU16((uint16_t)h);
+    uint8_t packed = 0x80 | ((palBits - 1) << 4) | (palBits - 1);
+    gw.WriteByte(packed);
+    gw.WriteByte(0);
+    gw.WriteByte(0);
+
+    for (int i = 0; i < palSize; i++)
+    {
+        if (i < (int)palette.size())
+        { gw.WriteByte(palette[i].r); gw.WriteByte(palette[i].g); gw.WriteByte(palette[i].b); }
+        else
+        { gw.WriteByte(0); gw.WriteByte(0); gw.WriteByte(0); }
+    }
+
+    gw.WriteByte(0x21); gw.WriteByte(0xFF); gw.WriteByte(11);
+    gw.Write("NETSCAPE2.0", 11);
+    gw.WriteByte(3); gw.WriteByte(1); gw.WriteU16(0); gw.WriteByte(0);
+
+    for (int f = 0; f < (int)canvas.frames.size(); f++)
+    {
+        const auto &frame = canvas.frames[f];
+        int cs = (int)(frame.duration * 100.0f + 0.5f);
+        if (cs < 1) cs = 1;
+
+        gw.WriteByte(0x21); gw.WriteByte(0xF9); gw.WriteByte(4);
+        gw.WriteByte(0x00); gw.WriteU16((uint16_t)cs); gw.WriteByte(0); gw.WriteByte(0);
+
+        gw.WriteByte(0x2C); gw.WriteU16(0); gw.WriteU16(0);
+        gw.WriteU16((uint16_t)w); gw.WriteU16((uint16_t)h); gw.WriteByte(0);
+
+        std::vector<uint8_t> indices(w * h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                indices[y * w + x] = FindIndex(palette, frame.GetPixel(x, y, w));
+
+        if (f == canvas.loopFrame && canvas.loopFrame > 0)
+            indices[(h - 1) * w + 0] = FindIndex(palette, Color{255, 255, 255});
+
+        int minCodeSize = palBits;
+        if (minCodeSize < 2) minCodeSize = 2;
+        WriteLzwData(gw, indices, minCodeSize);
+    }
+
+    gw.WriteByte(0x3B);
     return true;
 }
