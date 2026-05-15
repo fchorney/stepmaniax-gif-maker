@@ -805,6 +805,7 @@ int main(int, char**)
             }
             else if (uploadProgress >= 100)
             {
+                ImGui::SetNavCursorVisible(true);
                 ImGui::Text("Upload complete!");
                 if (ImGui::Button("OK"))
                     ImGui::CloseCurrentPopup();
