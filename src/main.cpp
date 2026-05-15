@@ -137,6 +137,8 @@ int main(int, char**)
     static int rightClickPanel = -1;
     static std::vector<Color> panelClipboard;
     static bool panelClipboardValid = false;
+    static CanvasFrame frameClipboard;
+    static bool frameClipboardValid = false;
 
 #ifdef __APPLE__
     #define SHORTCUT_MOD "Cmd"
@@ -691,7 +693,7 @@ int main(int, char**)
         ImGui::End();
 
         // --- Canvas ---
-        ImGui::Begin("Canvas");
+        ImGui::Begin("Canvas", nullptr, ImGuiWindowFlags_HorizontalScrollbar);
         {
             const char *modeStr = (canvas.mode == CanvasMode::Modern) ? "Modern (23x24)" : "Legacy (14x15)";
             ImGui::Text("Mode: %s | Frame %d/%d", modeStr,
@@ -699,15 +701,31 @@ int main(int, char**)
             ImGui::Separator();
 
             ImDrawList *draw = ImGui::GetWindowDrawList();
-            ImVec2 canvasPos = ImGui::GetCursorScreenPos();
             int gridW = canvas.Width();
             int gridH = canvas.Height();
             ImVec2 canvasSize(gridW * cellSize, gridH * cellSize);
+
+            // Center the grid in available space
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float offsetX = (avail.x > canvasSize.x) ? (avail.x - canvasSize.x) * 0.5f : 0;
+            float offsetY = (avail.y > canvasSize.y) ? (avail.y - canvasSize.y) * 0.5f : 0;
+            if (offsetX > 0 || offsetY > 0)
+                ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + offsetX, ImGui::GetCursorPosY() + offsetY));
+
+            ImVec2 canvasPos = ImGui::GetCursorScreenPos();
 
             // Invisible button for mouse interaction
             ImGui::InvisibleButton("##canvas", canvasSize);
             bool canvasHovered = ImGui::IsItemHovered();
             bool canvasActive = ImGui::IsItemActive();
+
+            // Ctrl+scroll to zoom canvas
+            if (canvasHovered && io.KeyCtrl && io.MouseWheel != 0)
+            {
+                cellSize += io.MouseWheel * 2.0f;
+                if (cellSize < 8.0f) cellSize = 8.0f;
+                if (cellSize > 40.0f) cellSize = 40.0f;
+            }
 
             // Draw pixels
             const auto &frame = canvas.CurrentFrame();
@@ -922,6 +940,11 @@ int main(int, char**)
             static bool previewSync = true;
             ImGui::SameLine();
             ImGui::Checkbox("Sync", &previewSync);
+            ImGui::SameLine();
+            if (previewPlaying)
+                ImGui::Text("Frame %d/%d (playing)", (previewSync ? canvas.currentFrame : previewFrame) + 1, (int)canvas.frames.size());
+            else
+                ImGui::Text("Frame %d/%d", (previewSync ? canvas.currentFrame : previewFrame) + 1, (int)canvas.frames.size());
 
             // Advance preview animation independently
             int totalFrames = (int)canvas.frames.size();
@@ -948,8 +971,6 @@ int main(int, char**)
             int w = canvas.Width();
             int h = canvas.Height();
             ImDrawList *draw = ImGui::GetWindowDrawList();
-            ImVec2 origin = ImGui::GetCursorScreenPos();
-
             // Panel layout dimensions
             float ledSpacing = previewZoom;
             float panelGap = previewZoom * 0.8f;
@@ -963,6 +984,15 @@ int main(int, char**)
             float outerSpan = (outerGrid - 1) * ledSpacing;
             float panelSize = outerSpan + ledSpacing * 2; // padding around LEDs
             float totalSize = panelSize * 3 + panelGap * 2;
+
+            // Center in available space
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float offsetX = (avail.x > totalSize) ? (avail.x - totalSize) * 0.5f : 0;
+            float offsetY = (avail.y > totalSize + 30) ? (avail.y - totalSize - 30) * 0.5f : 0;
+            if (offsetX > 0 || offsetY > 0)
+                ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + offsetX, ImGui::GetCursorPosY() + offsetY));
+
+            ImVec2 origin = ImGui::GetCursorScreenPos();
 
             // Dark background
             draw->AddRectFilled(origin, ImVec2(origin.x + totalSize, origin.y + totalSize), IM_COL32(20, 20, 20, 255));
@@ -1058,10 +1088,13 @@ int main(int, char**)
 
             ImGui::Dummy(ImVec2(totalSize, totalSize));
 
-            if (previewPlaying)
-                ImGui::Text("Frame %d/%d (playing)", displayFrame + 1, totalFrames);
-            else
-                ImGui::Text("Frame %d/%d", displayFrame + 1, totalFrames);
+            // Ctrl+scroll to zoom preview
+            if (ImGui::IsItemHovered() && io.KeyCtrl && io.MouseWheel != 0)
+            {
+                previewZoom += io.MouseWheel * 1.0f;
+                if (previewZoom < 3.0f) previewZoom = 3.0f;
+                if (previewZoom > 15.0f) previewZoom = 15.0f;
+            }
         }
         ImGui::End();
 
@@ -1113,7 +1146,9 @@ int main(int, char**)
                 }
             }
 
-            // Controls
+            // --- Playback ---
+            ImGui::TextDisabled("Playback:");
+            ImGui::SameLine();
             if (!playing)
             {
                 if (ImGui::Button("Play"))
@@ -1134,6 +1169,10 @@ int main(int, char**)
                 playing = true;
                 lastFrameTime = ImGui::GetTime();
             }
+
+            // --- Move ---
+            ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+            ImGui::TextDisabled("Move:");
             ImGui::SameLine();
             if (ImGui::Button("|<"))
                 canvas.currentFrame = 0;
@@ -1146,20 +1185,23 @@ int main(int, char**)
             ImGui::SameLine();
             if (ImGui::Button(">|"))
                 canvas.currentFrame = totalFrames - 1;
-            ImGui::SameLine();
-            ImGui::Text("Frame %d / %d", canvas.currentFrame + 1, totalFrames);
 
-            // Frame operations
+            // --- Frames ---
+            ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+            ImGui::TextDisabled("Frames:");
             ImGui::SameLine();
-            ImGui::Spacing(); ImGui::SameLine();
             if (ImGui::Button("-") && totalFrames > 1) { canvas.DeleteFrame(canvas.currentFrame); dirty = true; undo.SaveState(canvas, "Delete Frame"); }
             ImGui::SameLine();
             bool atFrameLimit = (totalFrames >= Canvas::MaxFrames);
             if (atFrameLimit) ImGui::BeginDisabled();
-            if (ImGui::Button("+")) { canvas.AddFrame(); dirty = true; undo.SaveState(canvas, "Add Frame"); }
-            ImGui::SameLine();
             if (ImGui::Button("Dup")) { canvas.DuplicateFrame(canvas.currentFrame); dirty = true; undo.SaveState(canvas, "Duplicate Frame"); }
+            ImGui::SameLine();
+            if (ImGui::Button("+")) { canvas.AddFrame(); dirty = true; undo.SaveState(canvas, "Add Frame"); }
             if (atFrameLimit) ImGui::EndDisabled();
+
+            // --- Shift ---
+            ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+            ImGui::TextDisabled("Shift:");
             ImGui::SameLine();
             if (ImGui::Button("<<") && canvas.currentFrame > 0)
             {
@@ -1174,18 +1216,15 @@ int main(int, char**)
                 canvas.currentFrame++;
                 dirty = true; undo.SaveState(canvas, "Shift Right");
             }
-            ImGui::SameLine();
-            if (atFrameLimit)
-                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d/%d max)", totalFrames, Canvas::MaxFrames);
-            else
-                ImGui::Text("(%d/%d max)", totalFrames, Canvas::MaxFrames);
 
-            // Per-frame duration
+            // --- Timing ---
+            ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+            ImGui::TextDisabled("Timing:");
+            ImGui::SameLine();
             static int editingDurFrame = -1;
             if (editingDurFrame < 0 || editingDurFrame >= (int)canvas.frames.size())
                 editingDurFrame = canvas.currentFrame;
             float durMs = canvas.frames[editingDurFrame].duration * 1000.0f;
-            ImGui::SameLine();
             ImGui::SetNextItemWidth(80);
             if (ImGui::InputFloat("ms##dur", &durMs, 0, 0, "%.0f"))
             {
@@ -1310,6 +1349,23 @@ int main(int, char**)
                     ImGui::OpenPopup("##frame_ctx");
                 if (ImGui::BeginPopup("##frame_ctx"))
                 {
+                    if (ImGui::MenuItem("Copy Frame"))
+                    {
+                        frameClipboard = canvas.frames[f];
+                        frameClipboardValid = true;
+                    }
+                    if (ImGui::MenuItem("Paste Frame", nullptr, false, frameClipboardValid && (int)canvas.frames.size() < Canvas::MaxFrames))
+                    {
+                        canvas.frames.insert(canvas.frames.begin() + f + 1, frameClipboard);
+                        canvas.currentFrame = f + 1;
+                        dirty = true; undo.SaveState(canvas, "Paste Frame");
+                    }
+                    if (ImGui::MenuItem("Delete Frame", nullptr, false, (int)canvas.frames.size() > 1))
+                    {
+                        canvas.DeleteFrame(f);
+                        dirty = true; undo.SaveState(canvas, "Delete Frame");
+                    }
+                    ImGui::Separator();
                     if (canvas.loopFrame == f)
                     {
                         if (ImGui::MenuItem("Clear Loop Point"))
@@ -1333,6 +1389,14 @@ int main(int, char**)
                 ImGui::PopID();
             }
             ImGui::EndChild();
+
+            // Frame info at bottom left
+            ImGui::Text("Frame %d / %d", canvas.currentFrame + 1, (int)canvas.frames.size());
+            ImGui::SameLine();
+            if ((int)canvas.frames.size() >= Canvas::MaxFrames)
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d max)", Canvas::MaxFrames);
+            else
+                ImGui::TextDisabled("(%d max)", Canvas::MaxFrames);
         }
         ImGui::End();
 
