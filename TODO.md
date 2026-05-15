@@ -28,7 +28,7 @@
 - [x] Loop frame marker (set/clear via right-click timeline, visual indicator, export/import)
 - [x] Preview and timeline playback respect loop point
 - [x] Restart button for playback from frame 0
-- [x] File menu: Open (Ctrl+O), Save (Ctrl+S, falls through to Save As for new files), Save As (Ctrl+Shift+S), New (Ctrl+N), Quit (Ctrl+Q)
+- [x] File menu: Open, Save (falls through to Save As for new), Save As, New, Quit + shortcuts
 - [x] Window title with filename + dirty indicator (*)
 - [x] Dirty state tracking (save point aware, survives undo/redo)
 - [x] Platform-aware shortcut labels (Cmd on macOS, Ctrl on Windows/Linux)
@@ -40,23 +40,20 @@
 - [x] Tooltips on all interactive elements (2s hover delay)
 - [x] Keyboard navigation in modal dialogs (arrow keys, Enter to confirm)
 - [x] Shortcuts blocked when popups are open
-- [x] Color limit check on all save paths (Save, Save As, shortcuts)
-- [x] Recent files list (max 20, parent_dir/filename, grayed missing files, remove/clear options)
+- [x] Color limit check on all save paths
+- [x] Recent files list (max 20, parent_dir/filename, grayed missing files, remove/clear)
 - [x] Cancel on file dialogs no longer triggers actions
 - [x] Onion skinning (prev/next toggles, dimmed colors + corner triangles)
-- [x] Recent files open directly after discard (no redundant file dialog)
-
-## Up Next
-
-### Hardware Features (requires connected pad)
-- Live preview via SMX_SetLights2 (drive LEDs directly from editor)
-- Load released + pressed GIFs for composite preview with pad input
-- Firmware upload via SMX_LightsUpload_PrepareUpload + BeginUpload
-- Connection status indicator
-- Block upload if >15 colors per panel
+- [x] Recent files open directly after discard
+- [x] Connection status indicator (per-pad, in Hardware menu)
+- [x] Live hardware preview (sync to editor + play animation modes)
+- [x] Firmware upload (released + pressed, per-pad selection, validation)
+- [x] Fill black pixels option for pressed uploads (makes overlay fully opaque)
+- [x] Composite preview (load released + pressed, overlay based on pad input, fill black option)
 
 ## Shelved (revisit if needed)
 - .smxgifs project files
-- Multi-pad support
+- Multi-pad editing (pads are independent)
 - Drag-and-drop GIF import
 - Custom theming (fonts, accent colors)
+- Dual-GIF editing UI (tabs for released/pressed)
