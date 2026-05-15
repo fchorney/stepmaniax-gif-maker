@@ -347,6 +347,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     ImGui::TextDisabled("Enable 'Fill black' to fully replace released.");
                     static bool fillBlackOnPressed = false;
                     ImGui::Checkbox("Fill black pixels with (1,1,1)", &fillBlackOnPressed);
+                    if (ImGui::BeginItemTooltip()) { ImGui::Text("Replace black (transparent) pixels with near-black\nso pressed animation fully replaces released"); ImGui::EndTooltip(); }
                     ImGui::Separator();
                     if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
                         doUpload(true, false, SMX_LightsType_Pressed, fillBlackOnPressed);
@@ -652,12 +653,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
             SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
             SDL_ShowOpenFileDialog(CompositeRelCallback, nullptr, window, filters, 1, nullptr, false);
         }
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Load released animation from a GIF file"); ImGui::EndTooltip(); }
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##rel"))
         {
             app.compositeReleased = app.canvas;
             app.compositeReleasedLoaded = true;
         }
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
         ImGui::Spacing();
         ImGui::Text("Pressed Animation:");
@@ -671,15 +674,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
             SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
             SDL_ShowOpenFileDialog(CompositePrsCallback, nullptr, window, filters, 1, nullptr, false);
         }
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Load pressed animation from a GIF file"); ImGui::EndTooltip(); }
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##prs"))
         {
             app.compositePressed = app.canvas;
             app.compositePressedLoaded = true;
         }
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
         if (app.compositePressedLoaded)
             ImGui::Checkbox("Fill black pixels (fully replace released)", &app.compositeFillBlack);
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Black pixels become opaque instead of transparent\nso pressed animation fully covers released"); ImGui::EndTooltip(); }
 
         ImGui::Separator();
         if (!app.compositePreview)

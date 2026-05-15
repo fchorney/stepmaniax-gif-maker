@@ -66,8 +66,10 @@ void RenderCanvas(AppState &app)
     {
         ImGui::SameLine();
         ImGui::Checkbox("Prev", &app.onionPrev);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Show previous frame ghost"); ImGui::EndTooltip(); }
         ImGui::SameLine();
         ImGui::Checkbox("Next", &app.onionNext);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Show next frame ghost"); ImGui::EndTooltip(); }
     }
     ImGui::End();
 
