@@ -219,6 +219,7 @@ int main(int, char**)
 
     // Composite preview state
     static bool compositePreview = false;
+    static bool showCompositeDialog = false;
     static Canvas compositeReleased;
     static Canvas compositePressed;
     static bool compositeReleasedLoaded = false;
@@ -484,7 +485,7 @@ int main(int, char**)
                 }
                 if (ImGui::BeginMenu("Upload to Firmware", info0.m_bConnected || info1.m_bConnected))
                 {
-                    auto doUpload = [&](bool pad0, bool pad1) {
+                    auto doUpload = [&](bool pad0, bool pad1, SMX_LightsType type) {
                         // Validate
                         if (canvas.mode != CanvasMode::Modern)
                             uploadError = "Upload requires Modern (23x24) mode.";
@@ -514,12 +515,12 @@ int main(int, char**)
                         bool ok = true;
                         if (pad0)
                         {
-                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 0, SMX_LightsType_Released, &prepErr))
+                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 0, type, &prepErr))
                             { uploadError = prepErr ? prepErr : "Prepare failed for pad 1."; ok = false; }
                         }
                         if (ok && pad1)
                         {
-                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 1, SMX_LightsType_Released, &prepErr))
+                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 1, type, &prepErr))
                             { uploadError = prepErr ? prepErr : "Prepare failed for pad 2."; ok = false; }
                         }
                         if (ok)
@@ -533,48 +534,31 @@ int main(int, char**)
                             showUploadDialog = true;
                     };
 
-                    if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
-                        doUpload(true, false);
-                    if (ImGui::MenuItem("Pad 2", nullptr, false, info1.m_bConnected))
-                        doUpload(false, true);
-                    if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
-                        doUpload(true, true);
+                    if (ImGui::BeginMenu("Released"))
+                    {
+                        if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
+                            doUpload(true, false, SMX_LightsType_Released);
+                        if (ImGui::MenuItem("Pad 2", nullptr, false, info1.m_bConnected))
+                            doUpload(false, true, SMX_LightsType_Released);
+                        if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
+                            doUpload(true, true, SMX_LightsType_Released);
+                        ImGui::EndMenu();
+                    }
+                    if (ImGui::BeginMenu("Pressed"))
+                    {
+                        if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
+                            doUpload(true, false, SMX_LightsType_Pressed);
+                        if (ImGui::MenuItem("Pad 2", nullptr, false, info1.m_bConnected))
+                            doUpload(false, true, SMX_LightsType_Pressed);
+                        if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
+                            doUpload(true, true, SMX_LightsType_Pressed);
+                        ImGui::EndMenu();
+                    }
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
-                if (ImGui::BeginMenu("Composite Preview", info0.m_bConnected || info1.m_bConnected))
-                {
-                    if (ImGui::MenuItem("Load Released GIF..."))
-                    {
-                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                        SDL_ShowOpenFileDialog(CompositeRelCallback, nullptr, window, filters, 1, nullptr, false);
-                    }
-                    if (compositeReleasedLoaded)
-                        ImGui::TextDisabled("  Released: loaded");
-                    if (ImGui::MenuItem("Load Pressed GIF..."))
-                    {
-                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                        SDL_ShowOpenFileDialog(CompositePrsCallback, nullptr, window, filters, 1, nullptr, false);
-                    }
-                    if (compositePressedLoaded)
-                        ImGui::TextDisabled("  Pressed: loaded");
-                    ImGui::Separator();
-                    if (ImGui::MenuItem("Start", nullptr, compositePreview, compositeReleasedLoaded))
-                    {
-                        compositePreview = !compositePreview;
-                        if (compositePreview)
-                        {
-                            compositeLastSend = 0;
-                            compositeFrameTime = 0;
-                            compositeRelFrame = 0;
-                            compositePrsFrame = 0;
-                            livePreview = false; // disable normal preview
-                        }
-                        else
-                            SMX_ReenableAutoLights();
-                    }
-                    ImGui::EndMenu();
-                }
+                if (ImGui::MenuItem("Composite Preview...", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+                    showCompositeDialog = true;
                 ImGui::Separator();
                 if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
                     SMX_ReenableAutoLights();
@@ -842,6 +826,92 @@ int main(int, char**)
             if (ImGui::Button("OK"))
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
+            ImGui::EndPopup();
+        }
+
+        // --- Composite Preview Dialog ---
+        if (showCompositeDialog)
+        {
+            ImGui::OpenPopup("Composite Preview");
+            showCompositeDialog = false;
+        }
+        if (ImGui::BeginPopupModal("Composite Preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
+
+            ImGui::Text("Released Animation:");
+            ImGui::SameLine();
+            if (compositeReleasedLoaded)
+                ImGui::TextColored(ImVec4(0, 1, 0, 1), "Loaded (%d frames)", (int)compositeReleased.frames.size());
+            else
+                ImGui::TextDisabled("Not loaded");
+            if (ImGui::Button("Load from File##rel"))
+            {
+                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                SDL_ShowOpenFileDialog(CompositeRelCallback, nullptr, window, filters, 1, nullptr, false);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Use Current GIF##rel"))
+            {
+                compositeReleased = canvas;
+                compositeReleasedLoaded = true;
+            }
+
+            ImGui::Spacing();
+            ImGui::Text("Pressed Animation:");
+            ImGui::SameLine();
+            if (compositePressedLoaded)
+                ImGui::TextColored(ImVec4(0, 1, 0, 1), "Loaded (%d frames)", (int)compositePressed.frames.size());
+            else
+                ImGui::TextDisabled("Not loaded (optional)");
+            if (ImGui::Button("Load from File##prs"))
+            {
+                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                SDL_ShowOpenFileDialog(CompositePrsCallback, nullptr, window, filters, 1, nullptr, false);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Use Current GIF##prs"))
+            {
+                compositePressed = canvas;
+                compositePressedLoaded = true;
+            }
+
+            ImGui::Separator();
+            if (!compositePreview)
+            {
+                if (ImGui::Button("Start", ImVec2(80, 0)))
+                {
+                    if (compositeReleasedLoaded)
+                    {
+                        compositePreview = true;
+                        compositeLastSend = 0;
+                        compositeFrameTime = 0;
+                        compositeRelFrame = 0;
+                        compositePrsFrame = 0;
+                        livePreview = false;
+                    }
+                }
+            }
+            else
+            {
+                if (ImGui::Button("Stop", ImVec2(80, 0)))
+                {
+                    compositePreview = false;
+                    SMX_ReenableAutoLights();
+                }
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0, 1, 0, 1), "Playing...");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(80, 0)))
+            {
+                if (compositePreview)
+                {
+                    compositePreview = false;
+                    SMX_ReenableAutoLights();
+                }
+                ImGui::CloseCurrentPopup();
+            }
             ImGui::EndPopup();
         }
 
