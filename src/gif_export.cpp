@@ -10,16 +10,19 @@
 
 namespace {
 
-struct GifWriter {
+struct GifWriter
+{
     FILE *fp = nullptr;
     std::vector<char> *buf = nullptr;
 
-    bool Open(const std::string &path) {
+    bool Open(const std::string &path)
+    {
         fp = fopen(path.c_str(), "wb");
         return fp != nullptr;
     }
     void OpenMemory(std::vector<char> *outBuf) { buf = outBuf; buf->clear(); }
-    void Write(const void *data, size_t size) {
+    void Write(const void *data, size_t size)
+    {
         if (fp) fwrite(data, 1, size, fp);
         else if (buf) buf->insert(buf->end(), (const char*)data, (const char*)data + size);
     }

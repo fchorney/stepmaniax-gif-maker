@@ -1,4 +1,5 @@
 #pragma once
+/// GIF decoder for importing SMX-compatible animations using gif_load.h.
 
 #include "canvas.h"
 #include <string>

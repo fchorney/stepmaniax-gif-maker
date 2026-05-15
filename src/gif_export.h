@@ -1,4 +1,5 @@
 #pragma once
+/// Custom GIF encoder for SMX-compatible animations (exact palettes, uncompressed LZW).
 
 #include "canvas.h"
 #include <string>

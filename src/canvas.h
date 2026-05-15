@@ -1,14 +1,17 @@
 #pragma once
+/// Canvas data model: pixel buffer, panels, LED positions, and frame management.
 
 #include <cstdint>
 #include <vector>
 
-enum class CanvasMode {
+enum class CanvasMode
+{
     Legacy,  // 14x15, 4x4 LEDs per panel (16 LEDs)
     Modern,  // 23x24, 4x4 outer + 3x3 inner per panel (25 LEDs)
 };
 
-struct Color {
+struct Color
+{
     uint8_t r = 0, g = 0, b = 0;
     bool operator==(const Color &o) const { return r == o.r && g == o.g && b == o.b; }
     bool operator!=(const Color &o) const { return !(*this == o); }
@@ -16,7 +19,8 @@ struct Color {
 };
 
 // A single frame of the full canvas (all 9 panels).
-struct CanvasFrame {
+struct CanvasFrame
+{
     std::vector<Color> pixels; // width * height
     float duration = 1.0f / 30.0f; // seconds
 
@@ -25,7 +29,8 @@ struct CanvasFrame {
 };
 
 // The full canvas state for one (pad, animation_type) combination.
-struct Canvas {
+struct Canvas
+{
     CanvasMode mode = CanvasMode::Modern;
     std::vector<CanvasFrame> frames;
     int currentFrame = 0;

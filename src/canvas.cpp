@@ -187,7 +187,11 @@ void Canvas::QuantizePanel(int panel, int maxColors)
     int w = Width(), h = Height();
 
     // Collect all non-black colors used in this panel across all frames
-    struct ColorCount { Color c; int count = 0; };
+    struct ColorCount
+    {
+        Color c;
+        int count = 0;
+    };
     std::vector<ColorCount> palette;
 
     for (const auto &frame : frames)

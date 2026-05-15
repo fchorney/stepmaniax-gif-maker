@@ -1,4 +1,5 @@
 #pragma once
+/// Default ImGui window layout (embedded ini for first-launch docking arrangement).
 
 // Default ImGui window layout (docked arrangement).
 // Written to imgui.ini on first launch when no config exists.

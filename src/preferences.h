@@ -1,4 +1,5 @@
 #pragma once
+/// User preferences: keybindings, recent files, and settings (JSON persistence).
 
 #include <string>
 #include <vector>
@@ -8,7 +9,8 @@
 // Apostrophe=596, Comma=597, Minus=598, Period=599, Slash=600,
 // Semicolon=601, Equal=602, LeftBracket=603
 // Space=524, Delete=522, Home=519, End=520, LeftArrow=513, RightArrow=514
-struct Keybindings {
+struct Keybindings
+{
     int draw = 537;  // ImGuiKey_1
     int erase = 538; // ImGuiKey_2
     int fill = 539;  // ImGuiKey_3
@@ -28,7 +30,8 @@ struct Keybindings {
     int shiftRight = 599;   // ImGuiKey_Period
 };
 
-struct Preferences {
+struct Preferences
+{
     std::string mode = "modern"; // "legacy" or "modern"
     std::vector<std::string> recentFiles;
     Keybindings keys;

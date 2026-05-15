@@ -1,10 +1,12 @@
 #pragma once
+/// Snapshot-based undo/redo system for canvas state.
 
 #include "canvas.h"
 #include <string>
 #include <vector>
 
-class UndoHistory {
+class UndoHistory
+{
 public:
     // Call after any modifying operation to save current state.
     void SaveState(const Canvas &canvas, const char *label = "");
@@ -35,7 +37,8 @@ public:
     void Clear();
 
 private:
-    struct Snapshot {
+    struct Snapshot
+    {
         CanvasMode mode;
         int currentFrame;
         int loopFrame;

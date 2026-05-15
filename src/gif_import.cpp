@@ -21,7 +21,8 @@
 
 namespace {
 
-struct DecodeState {
+struct DecodeState
+{
     std::vector<CanvasFrame> frames;
     std::vector<uint8_t> canvas; // composited RGBA
     std::vector<uint8_t> prevCanvas;

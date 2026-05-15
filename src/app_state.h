@@ -1,4 +1,5 @@
 #pragma once
+/// Application-wide shared state passed to all UI and hardware modules.
 
 #include "canvas.h"
 #include "undo.h"
@@ -18,7 +19,8 @@ enum PendingAction { Pending_None = 0, Pending_New, Pending_Import, Pending_Quit
 #endif
 
 /// Shared application state passed to all UI/hardware modules.
-struct AppState {
+struct AppState
+{
     Canvas canvas;
     UndoHistory undo;
     Preferences prefs;
