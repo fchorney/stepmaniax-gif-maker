@@ -451,64 +451,64 @@ int main(int, char**)
                         livePreviewFrameTime = 0;
                     }
                 }
-                if (ImGui::MenuItem("Upload to Firmware", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+                if (ImGui::BeginMenu("Upload to Firmware", info0.m_bConnected || info1.m_bConnected))
                 {
-                    // Validate
-                    if (canvas.mode != CanvasMode::Modern)
-                        uploadError = "Upload requires Modern (23x24) mode.";
-                    else if ((int)canvas.frames.size() > 32)
-                        uploadError = "Too many frames (max 32).";
-                    else
-                    {
-                        bool overLimit = false;
-                        for (int p = 0; p < 9; p++)
-                            if (canvas.ColorCountForPanelAllFrames(p) > 15)
-                                overLimit = true;
-                        if (overLimit)
-                            uploadError = "One or more panels exceed 15 colors.";
+                    auto doUpload = [&](bool pad0, bool pad1) {
+                        // Validate
+                        if (canvas.mode != CanvasMode::Modern)
+                            uploadError = "Upload requires Modern (23x24) mode.";
+                        else if ((int)canvas.frames.size() > 32)
+                            uploadError = "Too many frames (max 32).";
                         else
-                            uploadError.clear();
-                    }
+                        {
+                            bool overLimit = false;
+                            for (int p = 0; p < 9; p++)
+                                if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                                    overLimit = true;
+                            if (overLimit)
+                                uploadError = "One or more panels exceed 15 colors.";
+                            else
+                                uploadError.clear();
+                        }
 
-                    if (!uploadError.empty())
-                        showUploadDialog = true;
-                    else
-                    {
-                        // Export to memory and prepare upload
+                        if (!uploadError.empty())
+                        { showUploadDialog = true; return; }
+
                         std::vector<char> gifData;
                         std::string err;
-                        if (ExportGifToMemory(canvas, gifData, err))
+                        if (!ExportGifToMemory(canvas, gifData, err))
+                        { uploadError = "Failed to encode GIF: " + err; showUploadDialog = true; return; }
+
+                        const char *prepErr = nullptr;
+                        bool ok = true;
+                        if (pad0)
                         {
-                            const char *prepErr = nullptr;
-                            bool ok = true;
-                            if (info0.m_bConnected)
-                            {
-                                if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 0, SMX_LightsType_Released, &prepErr))
-                                { uploadError = prepErr ? prepErr : "Prepare failed for pad 1."; ok = false; }
-                            }
-                            if (ok && info1.m_bConnected)
-                            {
-                                if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 1, SMX_LightsType_Released, &prepErr))
-                                { uploadError = prepErr ? prepErr : "Prepare failed for pad 2."; ok = false; }
-                            }
-                            if (ok)
-                            {
-                                uploadInProgress = true;
-                                g_uploadProgress.store(0);
-                                if (info0.m_bConnected)
-                                    SMX_LightsUpload_BeginUpload(0, UploadProgressCb, nullptr);
-                                if (info1.m_bConnected)
-                                    SMX_LightsUpload_BeginUpload(1, UploadProgressCb, nullptr);
-                            }
-                            else
-                                showUploadDialog = true;
+                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 0, SMX_LightsType_Released, &prepErr))
+                            { uploadError = prepErr ? prepErr : "Prepare failed for pad 1."; ok = false; }
+                        }
+                        if (ok && pad1)
+                        {
+                            if (!SMX_LightsUpload_PrepareUpload(gifData.data(), (int)gifData.size(), 1, SMX_LightsType_Released, &prepErr))
+                            { uploadError = prepErr ? prepErr : "Prepare failed for pad 2."; ok = false; }
+                        }
+                        if (ok)
+                        {
+                            uploadInProgress = true;
+                            g_uploadProgress.store(0);
+                            if (pad0) SMX_LightsUpload_BeginUpload(0, UploadProgressCb, nullptr);
+                            if (pad1) SMX_LightsUpload_BeginUpload(1, UploadProgressCb, nullptr);
                         }
                         else
-                        {
-                            uploadError = "Failed to encode GIF: " + err;
                             showUploadDialog = true;
-                        }
-                    }
+                    };
+
+                    if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
+                        doUpload(true, false);
+                    if (ImGui::MenuItem("Pad 2", nullptr, false, info1.m_bConnected))
+                        doUpload(false, true);
+                    if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
+                        doUpload(true, true);
+                    ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
