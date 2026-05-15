@@ -28,7 +28,7 @@
 - [x] Loop frame marker (set/clear via right-click timeline, visual indicator, export/import)
 - [x] Preview and timeline playback respect loop point
 - [x] Restart button for playback from frame 0
-- [x] File menu: Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), New (Ctrl+N), Quit (Ctrl+Q)
+- [x] File menu: Open (Ctrl+O), Save (Ctrl+S, falls through to Save As for new files), Save As (Ctrl+Shift+S), New (Ctrl+N), Quit (Ctrl+Q)
 - [x] Window title with filename + dirty indicator (*)
 - [x] Dirty state tracking (save point aware, survives undo/redo)
 - [x] Platform-aware shortcut labels (Cmd on macOS, Ctrl on Windows/Linux)
@@ -41,8 +41,10 @@
 - [x] Keyboard navigation in modal dialogs (arrow keys, Enter to confirm)
 - [x] Shortcuts blocked when popups are open
 - [x] Color limit check on all save paths (Save, Save As, shortcuts)
-- [x] Recent files list (max 20, parent_dir/filename display, grayed missing files, remove/clear options)
-- [x] Cancel save dialog no longer creates empty .gif file
+- [x] Recent files list (max 20, parent_dir/filename, grayed missing files, remove/clear options)
+- [x] Cancel on file dialogs no longer triggers actions
+- [x] Onion skinning (prev/next toggles, dimmed colors + corner triangles)
+- [x] Recent files open directly after discard (no redundant file dialog)
 
 ## Up Next
 
@@ -53,11 +55,8 @@
 - Connection status indicator
 - Block upload if >15 colors per panel
 
-### Polish / Nice-to-Have
-- Onion skinning (ghost of previous/next frame)
-- Custom theming (fonts, accent colors)
-
 ## Shelved (revisit if needed)
-- .smxgifs project files (not needed — editor works on single GIFs, hardware preview can load released+pressed separately)
-- Multi-pad support (pads are independent, no benefit to editing both simultaneously)
-- Drag-and-drop GIF import (low priority, can add if requested)
+- .smxgifs project files
+- Multi-pad support
+- Drag-and-drop GIF import
+- Custom theming (fonts, accent colors)

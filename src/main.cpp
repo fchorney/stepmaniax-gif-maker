@@ -36,7 +36,7 @@ static void ExportDialogCallback(void *userdata, const char * const *filelist, i
 static void ImportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
-    if (filelist && filelist[0])
+    if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_importPath = filelist[0];
         g_importRequested = true;
@@ -270,7 +270,7 @@ int main(int, char**)
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Save", SHORTCUT_MOD "+S", false, !currentFilePath.empty()))
+                if (ImGui::MenuItem("Save", SHORTCUT_MOD "+S"))
                 {
                     // Check color limits first
                     bool overLimit = false;
@@ -279,6 +279,11 @@ int main(int, char**)
                             overLimit = true;
                     if (overLimit)
                         showExportWarning = true;
+                    else if (currentFilePath.empty())
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                    }
                     else
                     {
                         std::string err;
@@ -573,8 +578,13 @@ int main(int, char**)
                     showNewDialog = true;
                 else if (action == Pending_Import)
                 {
-                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                    SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                    if (!g_importPath.empty())
+                        g_importRequested = true;
+                    else
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowOpenFileDialog(ImportDialogCallback, nullptr, window, filters, 1, nullptr, false);
+                    }
                 }
                 else if (action == Pending_Quit)
                     running = false;
@@ -716,7 +726,7 @@ int main(int, char**)
             }
 
             // File shortcuts
-            if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S) && !currentFilePath.empty())
+            if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
             {
                 bool overLimit = false;
                 for (int p = 0; p < 9; p++)
@@ -724,6 +734,11 @@ int main(int, char**)
                         overLimit = true;
                 if (overLimit)
                     showExportWarning = true;
+                else if (currentFilePath.empty())
+                {
+                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                    SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                }
                 else
                 {
                     std::string err;
@@ -779,6 +794,18 @@ int main(int, char**)
         ImGui::Separator();
         ImGui::SliderFloat("Zoom", &cellSize, 8.0f, 40.0f, "%.0f px");
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Canvas zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
+        ImGui::Separator();
+        static bool onionSkin = false;
+        ImGui::Checkbox("Onion Skin", &onionSkin);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Show previous/next frame as faded overlay"); ImGui::EndTooltip(); }
+        static bool onionPrev = true, onionNext = true;
+        if (onionSkin)
+        {
+            ImGui::SameLine();
+            ImGui::Checkbox("Prev", &onionPrev);
+            ImGui::SameLine();
+            ImGui::Checkbox("Next", &onionNext);
+        }
         ImGui::End();
 
         // --- Color Palette ---
@@ -860,7 +887,28 @@ int main(int, char**)
                     else if (canvas.IsGutter(x, y))
                         fillColor = IM_COL32(50, 50, 50, 255);
                     else if (c.IsBlack())
-                        fillColor = IM_COL32(15, 15, 15, 255);
+                    {
+                        // Onion skin: show dimmed prev/next frame color
+                        if (onionSkin && canvas.IsLedPosition(x, y))
+                        {
+                            Color prev = {}, next = {};
+                            if (onionPrev && canvas.currentFrame > 0)
+                                prev = canvas.frames[canvas.currentFrame - 1].GetPixel(x, y, gridW);
+                            if (onionNext && canvas.currentFrame < (int)canvas.frames.size() - 1)
+                                next = canvas.frames[canvas.currentFrame + 1].GetPixel(x, y, gridW);
+
+                            if (!prev.IsBlack() && !next.IsBlack())
+                                fillColor = IM_COL32((prev.r + next.r) / 4, (prev.g + next.g) / 4, (prev.b + next.b) / 4, 255);
+                            else if (!prev.IsBlack())
+                                fillColor = IM_COL32(prev.r / 2, prev.g / 2, prev.b / 2, 255);
+                            else if (!next.IsBlack())
+                                fillColor = IM_COL32(next.r / 2, next.g / 2, next.b / 2, 255);
+                            else
+                                fillColor = IM_COL32(15, 15, 15, 255);
+                        }
+                        else
+                            fillColor = IM_COL32(15, 15, 15, 255);
+                    }
                     else
                         fillColor = IM_COL32(c.r, c.g, c.b, 255);
 
@@ -882,6 +930,26 @@ int main(int, char**)
                         float r = cellSize * 0.1f;
                         ImU32 dotColor = c.IsBlack() ? IM_COL32(80, 80, 80, 150) : IM_COL32(255, 255, 255, 80);
                         draw->AddCircleFilled(ImVec2(cx, cy), r, dotColor);
+                    }
+
+                    // Onion skin: corner triangles for prev/next frame
+                    if (onionSkin && canvas.IsLedPosition(x, y) && cellSize >= 10.0f)
+                    {
+                        float ts = cellSize * 0.35f; // triangle size
+                        bool hasPrev = false, hasNext = false;
+                        if (onionPrev && canvas.currentFrame > 0)
+                            hasPrev = !canvas.frames[canvas.currentFrame - 1].GetPixel(x, y, gridW).IsBlack();
+                        if (onionNext && canvas.currentFrame < (int)canvas.frames.size() - 1)
+                            hasNext = !canvas.frames[canvas.currentFrame + 1].GetPixel(x, y, gridW).IsBlack();
+
+                        if (hasPrev)
+                            draw->AddTriangleFilled(
+                                tl, ImVec2(tl.x + ts, tl.y), ImVec2(tl.x, tl.y + ts),
+                                IM_COL32(0, 255, 255, 180)); // cyan top-left
+                        if (hasNext)
+                            draw->AddTriangleFilled(
+                                br, ImVec2(br.x - ts, br.y), ImVec2(br.x, br.y - ts),
+                                IM_COL32(255, 0, 255, 180)); // magenta bottom-right
                     }
                 }
             }
