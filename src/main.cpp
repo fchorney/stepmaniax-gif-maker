@@ -228,6 +228,7 @@ int main(int, char**)
     static double compositeFrameTime = 0;
     static int compositeRelFrame = 0;
     static int compositePrsFrame = 0;
+    static bool compositeFillBlack = false;
 
     bool running = true;
     while (running)
@@ -896,6 +897,10 @@ int main(int, char**)
                 compositePressed = canvas;
                 compositePressedLoaded = true;
             }
+
+            
+            if (compositePressedLoaded)
+                ImGui::Checkbox("Fill black pixels (fully replace released)", &compositeFillBlack);
 
             ImGui::Separator();
             if (!compositePreview)
@@ -2026,7 +2031,7 @@ int main(int, char**)
                                 if (prsFrame)
                                 {
                                     Color pc = prsFrame->GetPixel(px, py, w);
-                                    if (!pc.IsBlack()) c = pc;
+                                    if (!pc.IsBlack() || compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
                                 }
                                 int offset = padOffset + panel * 75 + ledIdx * 3;
                                 lightData[offset + 0] = c.r;
@@ -2044,7 +2049,7 @@ int main(int, char**)
                                 if (prsFrame)
                                 {
                                     Color pc = prsFrame->GetPixel(px, py, w);
-                                    if (!pc.IsBlack()) c = pc;
+                                    if (!pc.IsBlack() || compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
                                 }
                                 int offset = padOffset + panel * 75 + ledIdx * 3;
                                 lightData[offset + 0] = c.r;
