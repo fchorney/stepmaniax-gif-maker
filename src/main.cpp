@@ -485,7 +485,7 @@ int main(int, char**)
                 }
                 if (ImGui::BeginMenu("Upload to Firmware", info0.m_bConnected || info1.m_bConnected))
                 {
-                    auto doUpload = [&](bool pad0, bool pad1, SMX_LightsType type) {
+                    auto doUpload = [&](bool pad0, bool pad1, SMX_LightsType type, bool fillBlack = false) {
                         // Validate
                         if (canvas.mode != CanvasMode::Modern)
                             uploadError = "Upload requires Modern (23x24) mode.";
@@ -510,6 +510,22 @@ int main(int, char**)
                         std::string err;
                         if (!ExportGifToMemory(canvas, gifData, err))
                         { uploadError = "Failed to encode GIF: " + err; showUploadDialog = true; return; }
+
+                        // For pressed uploads with fill: replace black LED pixels with (1,1,1)
+                        // so they become opaque instead of transparent on the hardware
+                        if (fillBlack)
+                        {
+                            Canvas tempCanvas = canvas;
+                            int w = tempCanvas.Width(), h = tempCanvas.Height();
+                            for (auto &f : tempCanvas.frames)
+                                for (int y = 0; y < h; y++)
+                                    for (int x = 0; x < w; x++)
+                                        if (tempCanvas.IsLedPosition(x, y) && f.GetPixel(x, y, w).IsBlack())
+                                            f.SetPixel(x, y, w, Color{1, 1, 1});
+                            gifData.clear();
+                            if (!ExportGifToMemory(tempCanvas, gifData, err))
+                            { uploadError = "Failed to encode GIF: " + err; showUploadDialog = true; return; }
+                        }
 
                         const char *prepErr = nullptr;
                         bool ok = true;
@@ -546,12 +562,17 @@ int main(int, char**)
                     }
                     if (ImGui::BeginMenu("Pressed"))
                     {
+                        ImGui::TextDisabled("Black pixels are transparent (overlay only).");
+                        ImGui::TextDisabled("Enable 'Fill black' to fully replace released.");
+                        static bool fillBlackOnPressed = false;
+                        ImGui::Checkbox("Fill black pixels with (1,1,1)", &fillBlackOnPressed);
+                        ImGui::Separator();
                         if (ImGui::MenuItem("Pad 1", nullptr, false, info0.m_bConnected))
-                            doUpload(true, false, SMX_LightsType_Pressed);
+                            doUpload(true, false, SMX_LightsType_Pressed, fillBlackOnPressed);
                         if (ImGui::MenuItem("Pad 2", nullptr, false, info1.m_bConnected))
-                            doUpload(false, true, SMX_LightsType_Pressed);
+                            doUpload(false, true, SMX_LightsType_Pressed, fillBlackOnPressed);
                         if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
-                            doUpload(true, true, SMX_LightsType_Pressed);
+                            doUpload(true, true, SMX_LightsType_Pressed, fillBlackOnPressed);
                         ImGui::EndMenu();
                     }
                     ImGui::EndMenu();
@@ -1987,10 +2008,11 @@ int main(int, char**)
                         int row = panel / 3;
                         bool pressed = (inputState & (1 << panel)) != 0;
 
-                        // Choose source: pressed GIF if panel is pressed and loaded, else released
-                        const CanvasFrame *srcFrame = &compositeReleased.frames[compositeRelFrame];
+                        // Base: always use released frame
+                        const CanvasFrame *relFrame = &compositeReleased.frames[compositeRelFrame];
+                        const CanvasFrame *prsFrame = nullptr;
                         if (pressed && compositePressedLoaded && !compositePressed.frames.empty())
-                            srcFrame = &compositePressed.frames[compositePrsFrame % (int)compositePressed.frames.size()];
+                            prsFrame = &compositePressed.frames[compositePrsFrame % (int)compositePressed.frames.size()];
 
                         int ledIdx = 0;
                         // Outer 4×4
@@ -1999,7 +2021,13 @@ int main(int, char**)
                             {
                                 int px = col * 8 + dx * 2;
                                 int py = row * 8 + dy * 2;
-                                Color c = srcFrame->GetPixel(px, py, w);
+                                Color c = relFrame->GetPixel(px, py, w);
+                                // Overlay pressed (non-black pixels replace released)
+                                if (prsFrame)
+                                {
+                                    Color pc = prsFrame->GetPixel(px, py, w);
+                                    if (!pc.IsBlack()) c = pc;
+                                }
                                 int offset = padOffset + panel * 75 + ledIdx * 3;
                                 lightData[offset + 0] = c.r;
                                 lightData[offset + 1] = c.g;
@@ -2012,7 +2040,12 @@ int main(int, char**)
                             {
                                 int px = col * 8 + dx * 2 + 1;
                                 int py = row * 8 + dy * 2 + 1;
-                                Color c = srcFrame->GetPixel(px, py, w);
+                                Color c = relFrame->GetPixel(px, py, w);
+                                if (prsFrame)
+                                {
+                                    Color pc = prsFrame->GetPixel(px, py, w);
+                                    if (!pc.IsBlack()) c = pc;
+                                }
                                 int offset = padOffset + panel * 75 + ledIdx * 3;
                                 lightData[offset + 0] = c.r;
                                 lightData[offset + 1] = c.g;
