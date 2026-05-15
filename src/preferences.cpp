@@ -66,6 +66,7 @@ void Preferences::Load(const std::string &path)
             if (k.contains("draw")) keys.draw = k["draw"];
             if (k.contains("erase")) keys.erase = k["erase"];
             if (k.contains("fill")) keys.fill = k["fill"];
+            if (k.contains("replace")) keys.replace = k["replace"];
             if (k.contains("pick")) keys.pick = k["pick"];
             if (k.contains("play_pause")) keys.playPause = k["play_pause"];
             if (k.contains("prev_frame")) keys.prevFrame = k["prev_frame"];
@@ -94,6 +95,7 @@ void Preferences::Save(const std::string &path) const
         {"draw", keys.draw},
         {"erase", keys.erase},
         {"fill", keys.fill},
+        {"replace", keys.replace},
         {"pick", keys.pick},
         {"play_pause", keys.playPause},
         {"prev_frame", keys.prevFrame},

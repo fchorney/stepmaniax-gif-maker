@@ -3,7 +3,7 @@
 ## Completed
 - [x] Project scaffolding (ImGui + SDL3 + SDK)
 - [x] Pixel grid canvas with LED-only editing
-- [x] Draw/Erase/Fill/Pick tools
+- [x] Draw/Erase/Fill/Replace/Pick tools
 - [x] Color palette with per-panel color count warnings
 - [x] Timeline with play/pause, frame navigation, add/dup/delete/reorder
 - [x] Per-frame duration editing (with "All" button, locked to frame while editing)
@@ -17,21 +17,30 @@
 - [x] Default window layout
 - [x] Mode selection (Legacy/Modern) via New dialog
 - [x] 32-frame hard limit enforcement (buttons disabled at limit)
-- [x] Export color warning with per-frame/panel detail + Quantize & Export option
+- [x] Save color warning with per-frame/panel detail + Quantize & Save option
 - [x] Quantize panel/all (nearest-neighbor, undoable)
-- [x] Copy/paste panel
+- [x] Copy/paste panel (right-click canvas menu)
+- [x] Copy/paste entire frames (Ctrl+C/V, right-click timeline, Edit menu)
 - [x] Right-click context menu with panel detection (works on non-LED spots too)
 - [x] Hardware color preview (66% scaling toggle, off by default)
 - [x] Preview panel: LED circles, panel outlines, dark background, zoom, independent playback
 - [x] Unsaved changes prompt (New/Open/Quit/window close) with settings toggle
-- [x] Loop frame marker (set/clear via menu + right-click, visual indicator below thumbnails, export/import)
+- [x] Loop frame marker (set/clear via right-click timeline, visual indicator, export/import)
 - [x] Preview and timeline playback respect loop point
 - [x] Restart button for playback from frame 0
-- [x] File menu rework: Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), New (Ctrl+N), Quit (Ctrl+Q)
+- [x] File menu: Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), New (Ctrl+N), Quit (Ctrl+Q)
 - [x] Window title with filename + dirty indicator (*)
 - [x] Dirty state tracking (save point aware, survives undo/redo)
 - [x] Platform-aware shortcut labels (Cmd on macOS, Ctrl on Windows/Linux)
 - [x] Import marks dirty if non-LED pixels were stripped
+- [x] Timeline controls with labeled sections and visual separators
+- [x] Canvas and preview centered in their panes
+- [x] Ctrl+scroll zoom for canvas and preview
+- [x] Horizontal scrollbar on canvas when zoomed in
+- [x] Tooltips on all interactive elements (2s hover delay)
+- [x] Keyboard navigation in modal dialogs (arrow keys, Enter to confirm)
+- [x] Shortcuts blocked when popups are open
+- [x] Color limit check on all save paths (Save, Save As, shortcuts)
 
 ## Up Next
 
@@ -44,11 +53,9 @@
 
 ### Polish / Nice-to-Have
 - Onion skinning (ghost of previous/next frame)
-- Copy/paste entire frames
 - Custom theming (fonts, accent colors)
 - Recent files list
 - Drag-and-drop GIF import
-- Frame copy/paste between frames
 
 ## Shelved (revisit if needed)
 - .smxgifs project files (not needed — editor works on single GIFs, hardware preview can load released+pressed separately)

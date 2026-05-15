@@ -13,7 +13,7 @@
 #include <set>
 #include <vector>
 
-enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Pick };
+enum Tool { Tool_Draw = 0, Tool_Erase, Tool_Fill, Tool_Replace, Tool_Pick };
 
 // File dialog state
 static std::string g_exportPath;
@@ -41,26 +41,30 @@ static void ImportDialogCallback(void *userdata, const char * const *filelist, i
     }
 }
 
-// Flood fill that operates on LED positions within a single panel
-static void FloodFill(CanvasFrame &frame, int w, int h, int x, int y, Color target, Color replacement, const Canvas &canvas)
+// Fill all LEDs in a panel with the given color
+static void FillPanel(CanvasFrame &frame, int w, int h, int x, int y, Color replacement, const Canvas &canvas)
 {
-    if (target == replacement) return;
-    if (!canvas.IsLedPosition(x, y)) return;
-
     int panel = canvas.PanelAt(x, y);
     if (panel < 0) return;
 
-    // Collect all LED positions in this panel
-    std::vector<std::pair<int,int>> leds;
     for (int py = 0; py < h; py++)
         for (int px = 0; px < w; px++)
             if (canvas.PanelAt(px, py) == panel && canvas.IsLedPosition(px, py))
-                leds.push_back({px, py});
+                frame.SetPixel(px, py, w, replacement);
+}
 
-    // Fill all LEDs in the panel that match the target color
-    for (auto [lx, ly] : leds)
-        if (frame.GetPixel(lx, ly, w) == target)
-            frame.SetPixel(lx, ly, w, replacement);
+// Replace all LEDs in a panel that match the target color with the replacement color
+static void ReplaceColor(CanvasFrame &frame, int w, int h, int x, int y, Color target, Color replacement, const Canvas &canvas)
+{
+    if (target == replacement) return;
+    int panel = canvas.PanelAt(x, y);
+    if (panel < 0) return;
+
+    for (int py = 0; py < h; py++)
+        for (int px = 0; px < w; px++)
+            if (canvas.PanelAt(px, py) == panel && canvas.IsLedPosition(px, py))
+                if (frame.GetPixel(px, py, w) == target)
+                    frame.SetPixel(px, py, w, replacement);
 }
 
 int main(int, char**)
@@ -91,6 +95,7 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     // Set up config directory for imgui.ini and preferences
     std::string configDir = GetConfigDir();
@@ -118,6 +123,7 @@ int main(int, char**)
     style.FrameRounding = 3.0f;
     style.GrabRounding = 3.0f;
     style.TabRounding = 3.0f;
+    style.HoverDelayNormal = 2.0f;
 
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -227,7 +233,10 @@ int main(int, char**)
                     {
                         std::string err;
                         if (ExportGif(canvas, currentFilePath, err))
-                            dirty = false; undo.MarkSaved();
+                        {
+                            dirty = false;
+                            undo.MarkSaved();
+                        }
                     }
                 }
                 if (ImGui::MenuItem("Save As...", SHORTCUT_MOD "+Shift+S"))
@@ -260,7 +269,18 @@ int main(int, char**)
                 if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, undo.CanUndo())) { undo.Undo(canvas); dirty = undo.HasUnsavedChanges(); }
                 if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, undo.CanRedo())) { undo.Redo(canvas); dirty = undo.HasUnsavedChanges(); }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Clear All")) { canvas.ClearAll(); dirty = true; undo.SaveState(canvas, "Clear All"); }
+                if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
+                {
+                    frameClipboard = canvas.CurrentFrame();
+                    frameClipboardValid = true;
+                }
+                if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, frameClipboardValid && (int)canvas.frames.size() < Canvas::MaxFrames))
+                {
+                    canvas.frames.insert(canvas.frames.begin() + canvas.currentFrame + 1, frameClipboard);
+                    canvas.currentFrame++;
+                    dirty = true; undo.SaveState(canvas, "Paste Frame");
+                }
+                ImGui::Separator();
                 if (ImGui::BeginMenu("Clear Panel"))
                 {
                     for (int p = 0; p < 9; p++)
@@ -271,31 +291,24 @@ int main(int, char**)
                     }
                     ImGui::EndMenu();
                 }
-                if (ImGui::MenuItem("Quantize All Panels (15 colors)"))
+                if (ImGui::MenuItem("Clear All Panels")) { canvas.ClearAll(); dirty = true; undo.SaveState(canvas, "Clear All"); }
+                if (ImGui::BeginMenu("Quantize Panel"))
+                {
+                    for (int p = 0; p < 9; p++)
+                    {
+                        char label[32];
+                        snprintf(label, sizeof(label), "Panel %d", p);
+                        if (ImGui::MenuItem(label)) { canvas.QuantizePanel(p); dirty = true; undo.SaveState(canvas, "Quantize Panel"); }
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::MenuItem("Quantize All Panels"))
                 {
                     for (int p = 0; p < 9; p++) canvas.QuantizePanel(p);
                     dirty = true; undo.SaveState(canvas, "Quantize All");
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Settings...")) showSettings = true;
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Animation"))
-            {
-                if (ImGui::MenuItem("Add Frame", nullptr, false, (int)canvas.frames.size() < Canvas::MaxFrames))
-                    { canvas.AddFrame(); dirty = true; undo.SaveState(canvas, "Add Frame"); }
-                if (ImGui::MenuItem("Delete Frame", nullptr, false, (int)canvas.frames.size() > 1))
-                    { canvas.DeleteFrame(canvas.currentFrame); dirty = true; undo.SaveState(canvas, "Delete Frame"); }
-                if (ImGui::MenuItem("Set Loop Point"))
-                {
-                    canvas.loopFrame = canvas.currentFrame;
-                    dirty = true; undo.SaveState(canvas, "Set Loop Point");
-                }
-                if (ImGui::MenuItem("Clear Loop Point", nullptr, false, canvas.loopFrame != 0))
-                {
-                    canvas.loopFrame = 0;
-                    dirty = true; undo.SaveState(canvas, "Clear Loop Point");
-                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Hardware"))
@@ -354,6 +367,7 @@ int main(int, char**)
             KeybindRow("Draw", &prefs.keys.draw);
             KeybindRow("Erase", &prefs.keys.erase);
             KeybindRow("Fill", &prefs.keys.fill);
+            KeybindRow("Replace", &prefs.keys.replace);
             KeybindRow("Pick Color", &prefs.keys.pick);
 
             ImGui::Spacing();
@@ -370,6 +384,13 @@ int main(int, char**)
             KeybindRow("Shift Left", &prefs.keys.shiftLeft);
             KeybindRow("Shift Right", &prefs.keys.shiftRight);
 
+            ImGui::Separator();
+            if (ImGui::Button("Reset Keybinds to Defaults"))
+            {
+                prefs.keys = Keybindings{};
+                rebindTarget = nullptr;
+            }
+
             ImGui::Spacing();
             ImGui::Text("General");
             ImGui::Separator();
@@ -383,11 +404,6 @@ int main(int, char**)
             ImGui::Checkbox("Prompt on unsaved changes", &prefs.promptOnUnsaved);
 
             ImGui::Separator();
-            if (ImGui::Button("Reset to Defaults"))
-            {
-                prefs.keys = Keybindings{};
-                rebindTarget = nullptr;
-            }
             ImGui::SameLine();
             if (ImGui::Button("Close"))
             {
@@ -419,11 +435,12 @@ int main(int, char**)
 
         if (showExportWarning)
         {
-            ImGui::OpenPopup("Export Warning");
+            ImGui::OpenPopup("Save Warning");
             showExportWarning = false;
         }
-        if (ImGui::BeginPopupModal("Export Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Save Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
             ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
             int w = canvas.Width(), h = canvas.Height();
@@ -449,9 +466,9 @@ int main(int, char**)
             }
             ImGui::EndChild();
             ImGui::Separator();
-            ImGui::Text("The GIF will work for host playback but cannot be\nuploaded to firmware. Export anyway?");
+            ImGui::Text("The GIF will work for host playback but cannot be\nuploaded to firmware. Save anyway?");
             ImGui::Separator();
-            if (ImGui::Button("Quantize & Export"))
+            if (ImGui::Button("Quantize & Save"))
             {
                 for (int p = 0; p < 9; p++) canvas.QuantizePanel(p);
                 dirty = true; undo.SaveState(canvas, "Quantize All");
@@ -460,7 +477,7 @@ int main(int, char**)
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Export Anyway"))
+            if (ImGui::Button("Save Anyway"))
             {
                 SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
                 SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
@@ -469,22 +486,25 @@ int main(int, char**)
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
                 ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
 
         if (showExportResult)
         {
-            ImGui::OpenPopup("Export Result");
+            ImGui::OpenPopup("Save Result");
             showExportResult = false;
         }
-        if (ImGui::BeginPopupModal("Export Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Save Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             if (exportSuccess)
-                ImGui::Text("GIF exported successfully!");
+                ImGui::Text("GIF saved successfully!");
             else
-                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Export failed: %s", exportError.c_str());
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Save failed: %s", exportError.c_str());
             if (ImGui::Button("OK"))
                 ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
 
@@ -496,6 +516,7 @@ int main(int, char**)
         }
         if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             ImGui::Text("You have unsaved changes. Discard them?");
             ImGui::Separator();
             if (ImGui::Button("Discard"))
@@ -519,6 +540,7 @@ int main(int, char**)
                 pendingAction = Pending_None;
                 ImGui::CloseCurrentPopup();
             }
+            ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
 
@@ -555,9 +577,11 @@ int main(int, char**)
         }
         if (ImGui::BeginPopupModal("Import Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Import failed: %s", importError.c_str());
             if (ImGui::Button("OK"))
                 ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
 
@@ -569,6 +593,7 @@ int main(int, char**)
         }
         if (ImGui::BeginPopupModal("New Animation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
             ImGui::Text("Create a new animation. This will discard current work.");
             ImGui::Separator();
             static int newMode = 1;
@@ -593,6 +618,7 @@ int main(int, char**)
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
                 ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
 
@@ -601,37 +627,79 @@ int main(int, char**)
         ImGui::Text("Drawing Tools");
         ImGui::Separator();
         ImGui::RadioButton("Draw", &tool, Tool_Draw);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Draw pixels with the selected color (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.draw)); ImGui::EndTooltip(); }
         ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.draw));
         ImGui::RadioButton("Erase", &tool, Tool_Erase);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Erase pixels (set to black/off) (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.erase)); ImGui::EndTooltip(); }
         ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.erase));
         ImGui::RadioButton("Fill", &tool, Tool_Fill);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Fill all LEDs in a panel with the selected color (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.fill)); ImGui::EndTooltip(); }
         ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.fill));
+        ImGui::RadioButton("Replace", &tool, Tool_Replace);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Replace all matching-color LEDs in a panel (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.replace)); ImGui::EndTooltip(); }
+        ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.replace));
         ImGui::RadioButton("Pick Color", &tool, Tool_Pick);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Pick a color from the canvas (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.pick)); ImGui::EndTooltip(); }
         ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.pick));
 
-        // Keyboard shortcuts (only when not typing in a text field)
-        if (!io.WantTextInput)
+        // Keyboard shortcuts (only when not typing and no popup open)
+        if (!io.WantTextInput && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
         {
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.draw)) tool = Tool_Draw;
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.erase)) tool = Tool_Erase;
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.fill)) tool = Tool_Fill;
+            if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.replace)) tool = Tool_Replace;
             if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.pick)) tool = Tool_Pick;
 
             // Undo/Redo
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { undo.Undo(canvas); dirty = undo.HasUnsavedChanges(); }
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { undo.Redo(canvas); dirty = undo.HasUnsavedChanges(); }
 
+            // Copy/Paste frame
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
+            {
+                frameClipboard = canvas.CurrentFrame();
+                frameClipboardValid = true;
+            }
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && frameClipboardValid && (int)canvas.frames.size() < Canvas::MaxFrames)
+            {
+                canvas.frames.insert(canvas.frames.begin() + canvas.currentFrame + 1, frameClipboard);
+                canvas.currentFrame++;
+                dirty = true; undo.SaveState(canvas, "Paste Frame");
+            }
+
             // File shortcuts
             if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S) && !currentFilePath.empty())
             {
-                std::string err;
-                if (ExportGif(canvas, currentFilePath, err))
-                    dirty = false; undo.MarkSaved();
+                bool overLimit = false;
+                for (int p = 0; p < 9; p++)
+                    if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
+                if (overLimit)
+                    showExportWarning = true;
+                else
+                {
+                    std::string err;
+                    if (ExportGif(canvas, currentFilePath, err))
+                    {
+                        dirty = false;
+                        undo.MarkSaved();
+                    }
+                }
             }
             if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
             {
-                SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
-                SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                bool overLimit = false;
+                for (int p = 0; p < 9; p++)
+                    if (canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
+                if (overLimit)
+                    showExportWarning = true;
+                else
+                {
+                    SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                    SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
+                }
             }
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O))
             {
@@ -663,6 +731,7 @@ int main(int, char**)
         ImGui::Text("Mode: %s", modeLabel);
         ImGui::Separator();
         ImGui::SliderFloat("Zoom", &cellSize, 8.0f, 40.0f, "%.0f px");
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Canvas zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
         ImGui::End();
 
         // --- Color Palette ---
@@ -810,8 +879,14 @@ int main(int, char**)
                         case Tool_Fill:
                             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                             {
+                                FillPanel(editFrame, gridW, gridH, mx, my, drawColor, canvas);
+                            }
+                            break;
+                        case Tool_Replace:
+                            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                            {
                                 Color target = editFrame.GetPixel(mx, my, gridW);
-                                FloodFill(editFrame, gridW, gridH, mx, my, target, drawColor, canvas);
+                                ReplaceColor(editFrame, gridW, gridH, mx, my, target, drawColor, canvas);
                             }
                             break;
                         case Tool_Pick:
@@ -856,6 +931,7 @@ int main(int, char**)
                 const char *toolLabel = "Draw";
                 if (tool == Tool_Erase) toolLabel = "Erase";
                 else if (tool == Tool_Fill) toolLabel = "Fill";
+                else if (tool == Tool_Replace) toolLabel = "Replace";
                 dirty = true; undo.SaveState(canvas, toolLabel);
             }
 
@@ -895,7 +971,7 @@ int main(int, char**)
                     canvas.ClearPanel(rightClickPanel);
                     dirty = true; undo.SaveState(canvas, "Clear Panel");
                 }
-                if (ImGui::MenuItem("Quantize This Panel (15 colors)") && rightClickPanel >= 0)
+                if (ImGui::MenuItem("Quantize This Panel") && rightClickPanel >= 0)
                 {
                     canvas.QuantizePanel(rightClickPanel);
                     dirty = true; undo.SaveState(canvas, "Quantize Panel");
@@ -926,20 +1002,25 @@ int main(int, char**)
             static int previewFrame = 0;
 
             ImGui::Checkbox("Hardware colors (66%%)", &hwColors);
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview with the 66%% color scaling applied by hardware"); ImGui::EndTooltip(); }
             ImGui::SliderFloat("Zoom##prev", &previewZoom, 3.0f, 15.0f, "%.0f");
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
 
             // Independent playback controls
             if (!previewPlaying)
             {
                 if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = canvas.currentFrame; }
+                if (ImGui::BeginItemTooltip()) { ImGui::Text("Play animation in preview"); ImGui::EndTooltip(); }
             }
             else
             {
                 if (ImGui::Button("Stop##prev")) previewPlaying = false;
+                if (ImGui::BeginItemTooltip()) { ImGui::Text("Stop preview playback"); ImGui::EndTooltip(); }
             }
             static bool previewSync = true;
             ImGui::SameLine();
             ImGui::Checkbox("Sync", &previewSync);
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Sync preview to editor frame selection"); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (previewPlaying)
                 ImGui::Text("Frame %d/%d (playing)", (previewSync ? canvas.currentFrame : previewFrame) + 1, (int)canvas.frames.size());
@@ -1156,11 +1237,13 @@ int main(int, char**)
                     playing = true;
                     lastFrameTime = ImGui::GetTime();
                 }
+                if (ImGui::BeginItemTooltip()) { ImGui::Text("Play animation (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.playPause)); ImGui::EndTooltip(); }
             }
             else
             {
                 if (ImGui::Button("Pause"))
                     playing = false;
+                if (ImGui::BeginItemTooltip()) { ImGui::Text("Pause animation (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.playPause)); ImGui::EndTooltip(); }
             }
             ImGui::SameLine();
             if (ImGui::Button("Restart"))
@@ -1169,6 +1252,7 @@ int main(int, char**)
                 playing = true;
                 lastFrameTime = ImGui::GetTime();
             }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Play from frame 0"); ImGui::EndTooltip(); }
 
             // --- Move ---
             ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
@@ -1176,27 +1260,34 @@ int main(int, char**)
             ImGui::SameLine();
             if (ImGui::Button("|<"))
                 canvas.currentFrame = 0;
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("First frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.firstFrame)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (ImGui::Button("<") && canvas.currentFrame > 0)
                 canvas.currentFrame--;
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Previous frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.prevFrame)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (ImGui::Button(">") && canvas.currentFrame < totalFrames - 1)
                 canvas.currentFrame++;
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Next frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.nextFrame)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (ImGui::Button(">|"))
                 canvas.currentFrame = totalFrames - 1;
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Last frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.lastFrame)); ImGui::EndTooltip(); }
 
             // --- Frames ---
             ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
             ImGui::TextDisabled("Frames:");
             ImGui::SameLine();
             if (ImGui::Button("-") && totalFrames > 1) { canvas.DeleteFrame(canvas.currentFrame); dirty = true; undo.SaveState(canvas, "Delete Frame"); }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Delete frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.deleteFrame)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             bool atFrameLimit = (totalFrames >= Canvas::MaxFrames);
             if (atFrameLimit) ImGui::BeginDisabled();
             if (ImGui::Button("Dup")) { canvas.DuplicateFrame(canvas.currentFrame); dirty = true; undo.SaveState(canvas, "Duplicate Frame"); }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Duplicate frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.dupFrame)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (ImGui::Button("+")) { canvas.AddFrame(); dirty = true; undo.SaveState(canvas, "Add Frame"); }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Add blank frame (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.addFrame)); ImGui::EndTooltip(); }
             if (atFrameLimit) ImGui::EndDisabled();
 
             // --- Shift ---
@@ -1209,6 +1300,7 @@ int main(int, char**)
                 canvas.currentFrame--;
                 dirty = true; undo.SaveState(canvas, "Shift Left");
             }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame left (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.shiftLeft)); ImGui::EndTooltip(); }
             ImGui::SameLine();
             if (ImGui::Button(">>") && canvas.currentFrame < totalFrames - 1)
             {
@@ -1216,6 +1308,7 @@ int main(int, char**)
                 canvas.currentFrame++;
                 dirty = true; undo.SaveState(canvas, "Shift Right");
             }
+            if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame right (%s)", ImGui::GetKeyName((ImGuiKey)prefs.keys.shiftRight)); ImGui::EndTooltip(); }
 
             // --- Timing ---
             ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
@@ -1251,8 +1344,9 @@ int main(int, char**)
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Set all frames to this duration");
 
-            // Arrow key navigation (when not typing)
-            if (!io.WantTextInput && !playing)
+            // Arrow key navigation (when not typing and no popup open)
+            bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+            if (!io.WantTextInput && !playing && !popupOpen)
             {
                 if (ImGui::IsKeyPressed((ImGuiKey)prefs.keys.prevFrame) && canvas.currentFrame > 0)
                     canvas.currentFrame--;
@@ -1349,18 +1443,18 @@ int main(int, char**)
                     ImGui::OpenPopup("##frame_ctx");
                 if (ImGui::BeginPopup("##frame_ctx"))
                 {
-                    if (ImGui::MenuItem("Copy Frame"))
+                    if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
                     {
                         frameClipboard = canvas.frames[f];
                         frameClipboardValid = true;
                     }
-                    if (ImGui::MenuItem("Paste Frame", nullptr, false, frameClipboardValid && (int)canvas.frames.size() < Canvas::MaxFrames))
+                    if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, frameClipboardValid && (int)canvas.frames.size() < Canvas::MaxFrames))
                     {
                         canvas.frames.insert(canvas.frames.begin() + f + 1, frameClipboard);
                         canvas.currentFrame = f + 1;
                         dirty = true; undo.SaveState(canvas, "Paste Frame");
                     }
-                    if (ImGui::MenuItem("Delete Frame", nullptr, false, (int)canvas.frames.size() > 1))
+                    if (ImGui::MenuItem("Delete Frame", ImGui::GetKeyName((ImGuiKey)prefs.keys.deleteFrame), false, (int)canvas.frames.size() > 1))
                     {
                         canvas.DeleteFrame(f);
                         dirty = true; undo.SaveState(canvas, "Delete Frame");

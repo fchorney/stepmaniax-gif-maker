@@ -12,7 +12,8 @@ struct Keybindings {
     int draw = 537;  // ImGuiKey_1
     int erase = 538; // ImGuiKey_2
     int fill = 539;  // ImGuiKey_3
-    int pick = 540;  // ImGuiKey_4
+    int replace = 540; // ImGuiKey_4
+    int pick = 541;  // ImGuiKey_5
 
     // Timeline
     int playPause = 524;    // ImGuiKey_Space
