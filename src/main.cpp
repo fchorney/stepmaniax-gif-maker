@@ -39,6 +39,26 @@ static bool g_exportRequested = false;
 static std::string g_importPath;
 static bool g_importRequested = false;
 
+// Composite preview file loading
+static std::string g_compositeRelPath;
+static std::string g_compositePrsPath;
+static bool g_compositeRelRequested = false;
+static bool g_compositePrsRequested = false;
+
+static void CompositeRelCallback(void *userdata, const char * const *filelist, int filter)
+{
+    (void)userdata; (void)filter;
+    if (filelist && filelist[0] && filelist[0][0] != '\0')
+    { g_compositeRelPath = filelist[0]; g_compositeRelRequested = true; }
+}
+
+static void CompositePrsCallback(void *userdata, const char * const *filelist, int filter)
+{
+    (void)userdata; (void)filter;
+    if (filelist && filelist[0] && filelist[0][0] != '\0')
+    { g_compositePrsPath = filelist[0]; g_compositePrsRequested = true; }
+}
+
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
@@ -196,6 +216,17 @@ int main(int, char**)
     static int uploadProgress = 0;
     static bool showUploadDialog = false;
     static std::string uploadError;
+
+    // Composite preview state
+    static bool compositePreview = false;
+    static Canvas compositeReleased;
+    static Canvas compositePressed;
+    static bool compositeReleasedLoaded = false;
+    static bool compositePressedLoaded = false;
+    static double compositeLastSend = 0;
+    static double compositeFrameTime = 0;
+    static int compositeRelFrame = 0;
+    static int compositePrsFrame = 0;
 
     bool running = true;
     while (running)
@@ -508,6 +539,40 @@ int main(int, char**)
                         doUpload(false, true);
                     if (ImGui::MenuItem("Both Pads", nullptr, false, info0.m_bConnected && info1.m_bConnected))
                         doUpload(true, true);
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+                if (ImGui::BeginMenu("Composite Preview", info0.m_bConnected || info1.m_bConnected))
+                {
+                    if (ImGui::MenuItem("Load Released GIF..."))
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowOpenFileDialog(CompositeRelCallback, nullptr, window, filters, 1, nullptr, false);
+                    }
+                    if (compositeReleasedLoaded)
+                        ImGui::TextDisabled("  Released: loaded");
+                    if (ImGui::MenuItem("Load Pressed GIF..."))
+                    {
+                        SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
+                        SDL_ShowOpenFileDialog(CompositePrsCallback, nullptr, window, filters, 1, nullptr, false);
+                    }
+                    if (compositePressedLoaded)
+                        ImGui::TextDisabled("  Pressed: loaded");
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Start", nullptr, compositePreview, compositeReleasedLoaded))
+                    {
+                        compositePreview = !compositePreview;
+                        if (compositePreview)
+                        {
+                            compositeLastSend = 0;
+                            compositeFrameTime = 0;
+                            compositeRelFrame = 0;
+                            compositePrsFrame = 0;
+                            livePreview = false; // disable normal preview
+                        }
+                        else
+                            SMX_ReenableAutoLights();
+                    }
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
@@ -1793,6 +1858,111 @@ int main(int, char**)
                 ImGui::TextDisabled("(%d max)", Canvas::MaxFrames);
         }
         ImGui::End();
+
+        // --- Composite GIF Loading ---
+        if (g_compositeRelRequested)
+        {
+            g_compositeRelRequested = false;
+            std::string err;
+            if (ImportGif(g_compositeRelPath, compositeReleased, err))
+                compositeReleasedLoaded = true;
+        }
+        if (g_compositePrsRequested)
+        {
+            g_compositePrsRequested = false;
+            std::string err;
+            if (ImportGif(g_compositePrsPath, compositePressed, err))
+                compositePressedLoaded = true;
+        }
+
+        // --- Composite Hardware Preview ---
+        if (compositePreview)
+        {
+            double now = ImGui::GetTime();
+            if (now - compositeLastSend >= 1.0 / 30.0)
+            {
+                compositeLastSend = now;
+
+                // Advance released animation
+                int relTotal = (int)compositeReleased.frames.size();
+                if (relTotal > 1)
+                {
+                    compositeFrameTime += 1.0 / 30.0;
+                    float dur = compositeReleased.frames[compositeRelFrame].duration;
+                    if (compositeFrameTime >= dur)
+                    {
+                        compositeFrameTime -= dur;
+                        compositeRelFrame++;
+                        if (compositeRelFrame >= relTotal)
+                            compositeRelFrame = compositeReleased.loopFrame;
+                    }
+                }
+
+                // Get input state
+                uint16_t inputState0 = SMX_GetInputState(0);
+                uint16_t inputState1 = SMX_GetInputState(1);
+
+                // Build light buffer
+                char lightData[1350] = {};
+                int w = compositeReleased.Width();
+
+                for (int padIdx = 0; padIdx < 2; padIdx++)
+                {
+                    uint16_t inputState = (padIdx == 0) ? inputState0 : inputState1;
+                    int padOffset = padIdx * 675;
+
+                    for (int panel = 0; panel < 9; panel++)
+                    {
+                        int col = panel % 3;
+                        int row = panel / 3;
+                        bool pressed = (inputState & (1 << panel)) != 0;
+
+                        // Choose source: pressed GIF if panel is pressed and loaded, else released
+                        const CanvasFrame *srcFrame = &compositeReleased.frames[compositeRelFrame];
+                        if (pressed && compositePressedLoaded && !compositePressed.frames.empty())
+                            srcFrame = &compositePressed.frames[compositePrsFrame % (int)compositePressed.frames.size()];
+
+                        int ledIdx = 0;
+                        // Outer 4×4
+                        for (int dy = 0; dy < 4; dy++)
+                            for (int dx = 0; dx < 4; dx++)
+                            {
+                                int px = col * 8 + dx * 2;
+                                int py = row * 8 + dy * 2;
+                                Color c = srcFrame->GetPixel(px, py, w);
+                                int offset = padOffset + panel * 75 + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                        // Inner 3×3
+                        for (int dy = 0; dy < 3; dy++)
+                            for (int dx = 0; dx < 3; dx++)
+                            {
+                                int px = col * 8 + dx * 2 + 1;
+                                int py = row * 8 + dy * 2 + 1;
+                                Color c = srcFrame->GetPixel(px, py, w);
+                                int offset = padOffset + panel * 75 + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                    }
+                }
+
+                SMX_SetLights2(lightData, 1350);
+
+                // Advance pressed animation
+                if (compositePressedLoaded && !compositePressed.frames.empty())
+                {
+                    compositePrsFrame++;
+                    if (compositePrsFrame >= (int)compositePressed.frames.size())
+                        compositePrsFrame = compositePressed.loopFrame;
+                }
+            }
+        }
 
         // --- Live Hardware Preview ---
         if (livePreview)
