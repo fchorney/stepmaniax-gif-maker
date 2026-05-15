@@ -38,6 +38,7 @@ private:
     struct Snapshot {
         CanvasMode mode;
         int currentFrame;
+        int loopFrame;
         std::vector<CanvasFrame> frames;
         std::string label;
     };

@@ -30,7 +30,7 @@
 │   ├── undo.h/cpp            # Snapshot-based undo/redo system
 │   ├── default_layout.h      # Default ImGui window layout (embedded ini)
 │   └── vendor/
-│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.0.0)
+│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.0.1)
 └── build/
 ```
 
@@ -69,7 +69,7 @@ Panels separated by 1-pixel gutters. Bottom row (y=height-1) is a flag row.
 - **Max 15 unique colors per panel across ALL frames** (black = transparent)
 - All 9 panels share the same frame timing
 - Each panel has its own independent 15-color palette
-- 0.6666 color scaling applied before sending to hardware
+- 0.6666 color scaling applied by the SDK before sending to hardware (editor sends full 0-255 values)
 - Pressed animation overlays on released: black pixels are transparent (show-through)
 
 ### Loop Frame Marker

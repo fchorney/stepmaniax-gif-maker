@@ -9,6 +9,7 @@ void UndoHistory::SaveState(const Canvas &canvas, const char *label)
     Snapshot snap;
     snap.mode = canvas.mode;
     snap.currentFrame = canvas.currentFrame;
+    snap.loopFrame = canvas.loopFrame;
     snap.frames = canvas.frames;
     snap.label = label ? label : "";
     m_states.push_back(std::move(snap));
@@ -29,6 +30,7 @@ bool UndoHistory::Undo(Canvas &canvas)
     const auto &snap = m_states[m_pos];
     canvas.mode = snap.mode;
     canvas.currentFrame = snap.currentFrame;
+    canvas.loopFrame = snap.loopFrame;
     canvas.frames = snap.frames;
     return true;
 }
@@ -40,6 +42,7 @@ bool UndoHistory::Redo(Canvas &canvas)
     const auto &snap = m_states[m_pos];
     canvas.mode = snap.mode;
     canvas.currentFrame = snap.currentFrame;
+    canvas.loopFrame = snap.loopFrame;
     canvas.frames = snap.frames;
     return true;
 }
@@ -51,6 +54,7 @@ void UndoHistory::GoTo(int pos, Canvas &canvas)
     const auto &snap = m_states[m_pos];
     canvas.mode = snap.mode;
     canvas.currentFrame = snap.currentFrame;
+    canvas.loopFrame = snap.loopFrame;
     canvas.frames = snap.frames;
 }
 
