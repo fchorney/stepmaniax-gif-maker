@@ -1,3 +1,4 @@
+/// Canvas window rendering, drawing tools, and mouse interaction.
 #include "ui_canvas.h"
 #include <cstdio>
 

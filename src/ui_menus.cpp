@@ -1,3 +1,4 @@
+/// Menu bar rendering and all popup/modal dialogs.
 #include "ui_menus.h"
 #include "gif_export.h"
 #include "gif_import.h"

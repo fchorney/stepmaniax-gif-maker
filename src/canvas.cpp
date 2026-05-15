@@ -1,3 +1,4 @@
+/// Canvas data model implementation.
 #include "canvas.h"
 #include <algorithm>
 #include <climits>

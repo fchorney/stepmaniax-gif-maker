@@ -1,3 +1,4 @@
+/// User preferences load/save (JSON).
 #include "preferences.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>

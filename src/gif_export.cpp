@@ -1,3 +1,4 @@
+/// Custom GIF encoder (uncompressed LZW, exact palettes).
 #include "gif_export.h"
 #include <cstdio>
 #include <cstring>

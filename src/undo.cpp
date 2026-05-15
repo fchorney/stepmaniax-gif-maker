@@ -1,3 +1,4 @@
+/// Undo/redo system implementation.
 #include "undo.h"
 
 void UndoHistory::SaveState(const Canvas &canvas, const char *label)

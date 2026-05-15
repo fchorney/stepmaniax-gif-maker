@@ -1,3 +1,4 @@
+/// LED preview panel and history panel rendering.
 #include "ui_preview.h"
 
 void RenderPreview(AppState &app)

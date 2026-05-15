@@ -1,3 +1,4 @@
+/// Application entry point, SDL/ImGui initialization, and main event loop.
 #include "app_state.h"
 #include "ui_menus.h"
 #include "ui_canvas.h"

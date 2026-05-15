@@ -1,3 +1,4 @@
+/// Timeline controls, frame thumbnails, and playback.
 #include "ui_timeline.h"
 #include <cstdio>
 #include <algorithm>

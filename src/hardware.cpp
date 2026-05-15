@@ -1,3 +1,4 @@
+/// Live hardware preview and composite preview via SMX_SetLights2.
 #include "hardware.h"
 #include <SMX.h>
 #include <cstring>

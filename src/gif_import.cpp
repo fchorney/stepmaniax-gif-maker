@@ -1,3 +1,4 @@
+/// GIF decoder using gif_load.h from the SMX SDK.
 #include "gif_import.h"
 #include <cstdio>
 #include <cstring>
