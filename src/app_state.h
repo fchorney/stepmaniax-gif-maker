@@ -69,6 +69,7 @@ struct AppState
     double compositeFrameTime = 0;
     int compositeRelFrame = 0;
     int compositePrsFrame = 0;
+    double compositePrsFrameTime = 0;
     bool compositeFillBlack = false;
 
     // Dialog flags
@@ -80,6 +81,18 @@ struct AppState
     bool onionSkin = false;
     bool onionPrev = true;
     bool onionNext = true;
+
+    // Cached color counts (invalidated on canvas change)
+    int cachedColorCounts[9] = {};
+    bool colorCountsDirty = true;
+
+    void RefreshColorCounts()
+    {
+        if (!colorCountsDirty) return;
+        for (int p = 0; p < 9; p++)
+            cachedColorCounts[p] = canvas.ColorCountForPanelAllFrames(p);
+        colorCountsDirty = false;
+    }
 
     // App lifecycle
     bool running = true;

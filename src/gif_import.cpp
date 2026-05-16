@@ -134,7 +134,12 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
     fseek(fp, 0, SEEK_SET);
 
     std::vector<char> data(size);
-    fread(data.data(), 1, size, fp);
+    if ((long)fread(data.data(), 1, size, fp) != size)
+    {
+        fclose(fp);
+        outError = "Failed to read file: " + path;
+        return false;
+    }
     fclose(fp);
 
     DecodeState state;

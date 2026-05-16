@@ -194,7 +194,10 @@ void RenderPreview(AppState &app)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 0, 1));
 
             if (ImGui::Selectable(buf, isCurrent))
+            {
                 app.undo.GoTo(i, app.canvas);
+                app.colorCountsDirty = true;
+            }
 
             if (isCurrent)
                 ImGui::PopStyleColor();

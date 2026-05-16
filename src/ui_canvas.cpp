@@ -92,7 +92,8 @@ void RenderCanvas(AppState &app)
         ImGui::Text("Panel Colors (all frames):");
         for (int p = 0; p < 9; p++)
         {
-            int count = app.canvas.ColorCountForPanelAllFrames(p);
+            app.RefreshColorCounts();
+            int count = app.cachedColorCounts[p];
             if (count > 15)
                 ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "  Panel %d: %d/15 (!)", p, count);
             else
@@ -310,7 +311,7 @@ void RenderCanvas(AppState &app)
             if (app.tool == Tool_Erase) toolLabel = "Erase";
             else if (app.tool == Tool_Fill) toolLabel = "Fill";
             else if (app.tool == Tool_Replace) toolLabel = "Replace";
-            app.dirty = true; app.undo.SaveState(app.canvas, toolLabel);
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, toolLabel);
         }
 
         if (ImGui::BeginPopup("##canvas_ctx"))
@@ -340,29 +341,29 @@ void RenderCanvas(AppState &app)
                                 app.canvas.CurrentFrame().SetPixel(x, y, w, app.panelClipboard[idx]);
                             idx++;
                         }
-                app.dirty = true; app.undo.SaveState(app.canvas, "Paste Panel");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Panel");
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Clear This Panel") && app.rightClickPanel >= 0)
             {
                 app.canvas.ClearPanel(app.rightClickPanel);
-                app.dirty = true; app.undo.SaveState(app.canvas, "Clear Panel");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel");
             }
             if (ImGui::MenuItem("Quantize This Panel") && app.rightClickPanel >= 0)
             {
                 app.canvas.QuantizePanel(app.rightClickPanel);
-                app.dirty = true; app.undo.SaveState(app.canvas, "Quantize Panel");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize Panel");
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Clear All Panels"))
             {
                 app.canvas.ClearAll();
-                app.dirty = true; app.undo.SaveState(app.canvas, "Clear All");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All");
             }
             if (ImGui::MenuItem("Quantize All Panels"))
             {
                 for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
-                app.dirty = true; app.undo.SaveState(app.canvas, "Quantize All");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::EndPopup();
         }

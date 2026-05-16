@@ -186,8 +186,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         if (ImGui::BeginMenu("Edit"))
         {
-            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); }
-            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); }
+            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
             ImGui::Separator();
             if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
             {
@@ -198,7 +198,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             {
                 app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
                 app.canvas.currentFrame++;
-                app.dirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
             }
             ImGui::Separator();
             if (ImGui::BeginMenu("Clear Panel"))
@@ -207,25 +207,25 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 {
                     char label[16];
                     snprintf(label, sizeof(label), "Panel %d", p);
-                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanel(p); app.dirty = true; app.undo.SaveState(app.canvas, "Clear Panel"); }
+                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanel(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel"); }
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
+            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
             if (ImGui::BeginMenu("Quantize Panel"))
             {
                 for (int p = 0; p < 9; p++)
                 {
                     char label[32];
                     snprintf(label, sizeof(label), "Panel %d", p);
-                    if (ImGui::MenuItem(label)) { app.canvas.QuantizePanel(p); app.dirty = true; app.undo.SaveState(app.canvas, "Quantize Panel"); }
+                    if (ImGui::MenuItem(label)) { app.canvas.QuantizePanel(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize Panel"); }
                 }
                 ImGui::EndMenu();
             }
             if (ImGui::MenuItem("Quantize All Panels"))
             {
                 for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
-                app.dirty = true; app.undo.SaveState(app.canvas, "Quantize All");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Settings...")) app.showSettings = true;
@@ -515,7 +515,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("Quantize & Save"))
         {
             for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
-            app.dirty = true; app.undo.SaveState(app.canvas, "Quantize All");
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             SDL_DialogFileFilter filters[] = { {"GIF files", "gif"} };
             SDL_ShowSaveFileDialog(ExportDialogCallback, nullptr, window, filters, 1, nullptr);
             ImGui::CloseCurrentPopup();
@@ -608,7 +608,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Open");
             if (pixelsModified)
+            {
                 app.dirty = true;
+                app.colorCountsDirty = true;
+            }
             else
             {
                 app.dirty = false; app.undo.MarkSaved();
@@ -702,6 +705,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     app.compositeFrameTime = 0;
                     app.compositeRelFrame = 0;
                     app.compositePrsFrame = 0;
+                    app.compositePrsFrameTime = 0;
                     app.livePreview = false;
                 }
             }
@@ -838,8 +842,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.replace)) app.tool = Tool_Replace;
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.pick)) app.tool = Tool_Pick;
 
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {
@@ -850,7 +854,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         {
             app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
             app.canvas.currentFrame++;
-            app.dirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
         }
 
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))

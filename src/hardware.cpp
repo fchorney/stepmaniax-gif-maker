@@ -94,12 +94,18 @@ void UpdateHardware(AppState &app)
 
             SMX_SetLights2(lightData, 1350);
 
-            // Advance pressed animation
+            // Advance pressed animation with proper timing
             if (app.compositePressedLoaded && !app.compositePressed.frames.empty())
             {
-                app.compositePrsFrame++;
-                if (app.compositePrsFrame >= (int)app.compositePressed.frames.size())
-                    app.compositePrsFrame = app.compositePressed.loopFrame;
+                app.compositePrsFrameTime += 1.0 / 30.0;
+                float dur = app.compositePressed.frames[app.compositePrsFrame].duration;
+                if (app.compositePrsFrameTime >= dur)
+                {
+                    app.compositePrsFrameTime -= dur;
+                    app.compositePrsFrame++;
+                    if (app.compositePrsFrame >= (int)app.compositePressed.frames.size())
+                        app.compositePrsFrame = app.compositePressed.loopFrame;
+                }
             }
         }
     }

@@ -133,8 +133,9 @@ int main(int, char**)
         RenderTimeline(app);
         UpdateHardware(app);
 
-        // Update window title
+        // Update window title (only when changed)
         {
+            static std::string lastTitle;
             std::string title = "StepManiaX GIF Maker";
             if (!app.currentFilePath.empty())
             {
@@ -143,7 +144,11 @@ int main(int, char**)
                 title = filename + " - " + title;
             }
             if (app.dirty) title = "* " + title;
-            SDL_SetWindowTitle(window, title.c_str());
+            if (title != lastTitle)
+            {
+                SDL_SetWindowTitle(window, title.c_str());
+                lastTitle = title;
+            }
         }
 
         // Render

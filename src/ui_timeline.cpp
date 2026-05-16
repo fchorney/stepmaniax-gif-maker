@@ -79,15 +79,15 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
         ImGui::TextDisabled("Frames:");
         ImGui::SameLine();
-        if (ImGui::Button("-") && totalFrames > 1) { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
+        if (ImGui::Button("-") && totalFrames > 1) { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Delete frame (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.deleteFrame)); ImGui::EndTooltip(); }
         ImGui::SameLine();
         bool atFrameLimit = (totalFrames >= Canvas::MaxFrames);
         if (atFrameLimit) ImGui::BeginDisabled();
-        if (ImGui::Button("Dup")) { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
+        if (ImGui::Button("Dup")) { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Duplicate frame (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.dupFrame)); ImGui::EndTooltip(); }
         ImGui::SameLine();
-        if (ImGui::Button("+")) { app.canvas.AddFrame(); app.dirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
+        if (ImGui::Button("+")) { app.canvas.AddFrame(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Add blank frame (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.addFrame)); ImGui::EndTooltip(); }
         if (atFrameLimit) ImGui::EndDisabled();
 
@@ -99,7 +99,7 @@ void RenderTimeline(AppState &app)
         {
             std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame - 1]);
             app.canvas.currentFrame--;
-            app.dirty = true; app.undo.SaveState(app.canvas, "Shift Left");
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame left (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftLeft)); ImGui::EndTooltip(); }
         ImGui::SameLine();
@@ -107,7 +107,7 @@ void RenderTimeline(AppState &app)
         {
             std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame + 1]);
             app.canvas.currentFrame++;
-            app.dirty = true; app.undo.SaveState(app.canvas, "Shift Right");
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame right (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftRight)); ImGui::EndTooltip(); }
 
@@ -132,7 +132,7 @@ void RenderTimeline(AppState &app)
             editingDurFrame = app.canvas.currentFrame;
         if (ImGui::IsItemDeactivatedAfterEdit())
         {
-            app.dirty = true;
+            app.dirty = true; app.colorCountsDirty = true;
             app.undo.SaveState(app.canvas, "Duration");
         }
         ImGui::SameLine();
@@ -140,7 +140,7 @@ void RenderTimeline(AppState &app)
         {
             float d = app.canvas.frames[editingDurFrame].duration;
             for (auto &f : app.canvas.frames) f.duration = d;
-            app.dirty = true; app.undo.SaveState(app.canvas, "Duration (all)");
+            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Duration (all)");
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Set all frames to this duration");
@@ -158,22 +158,22 @@ void RenderTimeline(AppState &app)
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.lastFrame))
                 app.canvas.currentFrame = totalFrames - 1;
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.addFrame) && totalFrames < Canvas::MaxFrames)
-                { app.canvas.AddFrame(); app.dirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
+                { app.canvas.AddFrame(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.dupFrame) && totalFrames < Canvas::MaxFrames)
-                { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
+                { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.deleteFrame) && totalFrames > 1)
-                { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
+                { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftLeft) && app.canvas.currentFrame > 0)
             {
                 std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame - 1]);
                 app.canvas.currentFrame--;
-                app.dirty = true; app.undo.SaveState(app.canvas, "Shift Left");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
             }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftRight) && app.canvas.currentFrame < totalFrames - 1)
             {
                 std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame + 1]);
                 app.canvas.currentFrame++;
-                app.dirty = true; app.undo.SaveState(app.canvas, "Shift Right");
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
             }
         }
         if (!io.WantTextInput)
@@ -251,12 +251,12 @@ void RenderTimeline(AppState &app)
                 {
                     app.canvas.frames.insert(app.canvas.frames.begin() + f + 1, app.frameClipboard);
                     app.canvas.currentFrame = f + 1;
-                    app.dirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+                    app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
                 }
                 if (ImGui::MenuItem("Delete Frame", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.deleteFrame), false, (int)app.canvas.frames.size() > 1))
                 {
                     app.canvas.DeleteFrame(f);
-                    app.dirty = true; app.undo.SaveState(app.canvas, "Delete Frame");
+                    app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame");
                 }
                 ImGui::Separator();
                 if (app.canvas.loopFrame == f)
@@ -264,7 +264,7 @@ void RenderTimeline(AppState &app)
                     if (ImGui::MenuItem("Clear Loop Point"))
                     {
                         app.canvas.loopFrame = 0;
-                        app.dirty = true; app.undo.SaveState(app.canvas, "Clear Loop Point");
+                        app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Loop Point");
                     }
                 }
                 else
@@ -272,7 +272,7 @@ void RenderTimeline(AppState &app)
                     if (ImGui::MenuItem("Set Loop Point"))
                     {
                         app.canvas.loopFrame = f;
-                        app.dirty = true; app.undo.SaveState(app.canvas, "Set Loop Point");
+                        app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Set Loop Point");
                     }
                 }
                 ImGui::EndPopup();

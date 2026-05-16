@@ -60,6 +60,8 @@ void Canvas::DeleteFrame(int idx)
     frames.erase(frames.begin() + idx);
     if (currentFrame >= (int)frames.size())
         currentFrame = (int)frames.size() - 1;
+    if (loopFrame >= (int)frames.size())
+        loopFrame = (int)frames.size() - 1;
 }
 
 CanvasFrame &Canvas::CurrentFrame() { return frames[currentFrame]; }
