@@ -86,7 +86,7 @@ add_executable(stepmaniax-gif-maker ${APP_SOURCES})
 target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)
 
-# Hide console window on Windows release builds
+# When linking smx-mp statically on Windows, prevent dllimport decoration
 if(WIN32)
-    set_target_properties(stepmaniax-gif-maker PROPERTIES WIN32_EXECUTABLE $<CONFIG:Release>)
+    target_compile_definitions(stepmaniax-gif-maker PRIVATE SMX_EXPORTS)
 endif()
