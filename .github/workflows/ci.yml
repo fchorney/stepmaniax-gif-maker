@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            install: sudo apt-get update && sudo apt-get install -y libhidapi-dev
+            install: sudo apt-get update && sudo apt-get install -y libhidapi-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
           - os: macos-latest
             install: brew install hidapi
           - os: windows-latest

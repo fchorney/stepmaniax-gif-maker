@@ -64,7 +64,7 @@ cd stepmaniax-gif-maker
 
 ```bash
 # Install dependencies (Ubuntu/Debian)
-sudo apt install build-essential cmake libhidapi-dev
+sudo apt install build-essential cmake libhidapi-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
 
 # Build
 mkdir build && cd build
