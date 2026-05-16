@@ -91,8 +91,21 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             if (ImGui::BeginMenu("Open Recent", !app.prefs.recentFiles.empty()))
             {
-                for (const auto &recent : app.prefs.recentFiles)
+                // Cache file existence on menu open (avoid stat() every frame)
+                static std::vector<bool> recentExists;
+                if (ImGui::IsWindowAppearing() || recentExists.size() != app.prefs.recentFiles.size())
                 {
+                    recentExists.resize(app.prefs.recentFiles.size());
+                    for (int i = 0; i < (int)app.prefs.recentFiles.size(); i++)
+                    {
+                        struct stat st;
+                        recentExists[i] = (stat(app.prefs.recentFiles[i].c_str(), &st) == 0);
+                    }
+                }
+
+                for (int idx = 0; idx < (int)app.prefs.recentFiles.size(); idx++)
+                {
+                    const auto &recent = app.prefs.recentFiles[idx];
                     string display;
                     size_t sep = recent.find_last_of("/\\");
                     if (sep != string::npos)
@@ -102,8 +115,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     }
                     else
                         display = recent;
-                    struct stat st;
-                    bool exists = (stat(recent.c_str(), &st) == 0);
+                    bool exists = (idx < (int)recentExists.size()) ? recentExists[idx] : false;
                     if (ImGui::MenuItem(display.c_str(), nullptr, false, exists))
                     {
                         if (app.prefs.promptOnUnsaved && app.dirty)

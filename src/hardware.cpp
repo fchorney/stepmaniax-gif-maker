@@ -35,11 +35,15 @@ void UpdateHardware(AppState &app)
             // Build light buffer
             char lightData[1350] = {};
             int w = app.compositeReleased.Width();
+            bool modern = (app.compositeReleased.mode == CanvasMode::Modern);
+            int ledsPerPanel = modern ? 25 : 16;
+            int bytesPerPanel = ledsPerPanel * 3;
+            int bytesPerPad = 9 * bytesPerPanel;
 
             for (int padIdx = 0; padIdx < 2; padIdx++)
             {
                 uint16_t inputState = (padIdx == 0) ? inputState0 : inputState1;
-                int padOffset = padIdx * 675;
+                int padOffset = padIdx * bytesPerPad;
 
                 for (int panel = 0; panel < 9; panel++)
                 {
@@ -53,46 +57,71 @@ void UpdateHardware(AppState &app)
                         prsFrame = &app.compositePressed.frames[app.compositePrsFrame % (int)app.compositePressed.frames.size()];
 
                     int ledIdx = 0;
-                    // Outer 4x4
-                    for (int dy = 0; dy < 4; dy++)
-                        for (int dx = 0; dx < 4; dx++)
-                        {
-                            int px = col * 8 + dx * 2;
-                            int py = row * 8 + dy * 2;
-                            Color c = relFrame->GetPixel(px, py, w);
-                            if (prsFrame)
+                    if (modern)
+                    {
+                        // Outer 4x4 at even coords
+                        for (int dy = 0; dy < 4; dy++)
+                            for (int dx = 0; dx < 4; dx++)
                             {
-                                Color pc = prsFrame->GetPixel(px, py, w);
-                                if (!pc.IsBlack() || app.compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
+                                int px = col * 8 + dx * 2;
+                                int py = row * 8 + dy * 2;
+                                Color c = relFrame->GetPixel(px, py, w);
+                                if (prsFrame)
+                                {
+                                    Color pc = prsFrame->GetPixel(px, py, w);
+                                    if (!pc.IsBlack() || app.compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
+                                }
+                                int offset = padOffset + panel * bytesPerPanel + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
                             }
-                            int offset = padOffset + panel * 75 + ledIdx * 3;
-                            lightData[offset + 0] = c.r;
-                            lightData[offset + 1] = c.g;
-                            lightData[offset + 2] = c.b;
-                            ledIdx++;
-                        }
-                    // Inner 3x3
-                    for (int dy = 0; dy < 3; dy++)
-                        for (int dx = 0; dx < 3; dx++)
-                        {
-                            int px = col * 8 + dx * 2 + 1;
-                            int py = row * 8 + dy * 2 + 1;
-                            Color c = relFrame->GetPixel(px, py, w);
-                            if (prsFrame)
+                        // Inner 3x3 at odd coords
+                        for (int dy = 0; dy < 3; dy++)
+                            for (int dx = 0; dx < 3; dx++)
                             {
-                                Color pc = prsFrame->GetPixel(px, py, w);
-                                if (!pc.IsBlack() || app.compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
+                                int px = col * 8 + dx * 2 + 1;
+                                int py = row * 8 + dy * 2 + 1;
+                                Color c = relFrame->GetPixel(px, py, w);
+                                if (prsFrame)
+                                {
+                                    Color pc = prsFrame->GetPixel(px, py, w);
+                                    if (!pc.IsBlack() || app.compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
+                                }
+                                int offset = padOffset + panel * bytesPerPanel + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
                             }
-                            int offset = padOffset + panel * 75 + ledIdx * 3;
-                            lightData[offset + 0] = c.r;
-                            lightData[offset + 1] = c.g;
-                            lightData[offset + 2] = c.b;
-                            ledIdx++;
-                        }
+                    }
+                    else
+                    {
+                        // Legacy: 4x4 at (col*5, row*5)
+                        for (int dy = 0; dy < 4; dy++)
+                            for (int dx = 0; dx < 4; dx++)
+                            {
+                                int px = col * 5 + dx;
+                                int py = row * 5 + dy;
+                                Color c = relFrame->GetPixel(px, py, w);
+                                if (prsFrame)
+                                {
+                                    Color pc = prsFrame->GetPixel(px, py, w);
+                                    if (!pc.IsBlack() || app.compositeFillBlack) c = pc.IsBlack() ? Color{1,1,1} : pc;
+                                }
+                                int offset = padOffset + panel * bytesPerPanel + ledIdx * 3;
+                                lightData[offset + 0] = c.r;
+                                lightData[offset + 1] = c.g;
+                                lightData[offset + 2] = c.b;
+                                ledIdx++;
+                            }
+                    }
                 }
             }
 
-            SMX_SetLights2(lightData, 1350);
+            int totalSize = modern ? 1350 : 864;
+            SMX_SetLights2(lightData, totalSize);
 
             // Advance pressed animation with proper timing
             if (app.compositePressedLoaded && !app.compositePressed.frames.empty())
