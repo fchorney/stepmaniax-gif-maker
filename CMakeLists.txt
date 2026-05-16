@@ -89,4 +89,7 @@ target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_jso
 # When linking smx-mp statically on Windows, prevent dllimport decoration
 if(WIN32)
     target_compile_definitions(stepmaniax-gif-maker PRIVATE SMX_EXPORTS)
+    # Hide console window in Release builds (keep main() as entry point)
+    target_link_options(stepmaniax-gif-maker PRIVATE
+        $<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>)
 endif()
