@@ -95,7 +95,15 @@ elseif(WIN32)
 else()
     set(HIDAPI_LIBRARIES hidapi)
 endif()
-set(HIDAPI_INCLUDE_DIRS "${hidapi_SOURCE_DIR}")
+# The SDK does #include <hidapi/hidapi.h>, so it needs the parent of hidapi/.
+# We can't use hidapi_SOURCE_DIR directly because it contains a VERSION file
+# that conflicts with the C++ <version> header on case-insensitive filesystems.
+# Create a clean include wrapper directory with just the hidapi/ headers.
+set(HIDAPI_INCLUDE_WRAPPER "${CMAKE_CURRENT_BINARY_DIR}/hidapi-include")
+file(MAKE_DIRECTORY "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
+file(GLOB HIDAPI_HEADERS "${hidapi_SOURCE_DIR}/hidapi/*.h")
+file(COPY ${HIDAPI_HEADERS} DESTINATION "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
+set(HIDAPI_INCLUDE_DIRS "${HIDAPI_INCLUDE_WRAPPER}")
 set(HIDAPI_LIBRARY_DIRS "")
 # Skip pkg-config search in the SDK (HIDAPI_FOUND is already set)
 add_subdirectory(${SMX_SDK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/smx-sdk-mp)
