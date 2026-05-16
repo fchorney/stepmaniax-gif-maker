@@ -48,28 +48,29 @@ jobs:
           path: stepmaniax-gif-maker-linux-x64.tar.gz
 
   build-macos:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-latest
-            arch: arm64
-            name: macos-arm64
-          - runner: macos-13
-            arch: x86_64
-            name: macos-x64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Install dependencies
-        run: brew install hidapi
+        run: |
+          # Build hidapi as universal (arm64 + x86_64)
+          brew install cmake
+          git clone --depth 1 https://github.com/libusb/hidapi.git /tmp/hidapi
+          cmake -B /tmp/hidapi/build -S /tmp/hidapi \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_INSTALL_PREFIX=/tmp/hidapi-universal \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/hidapi/build --target install
 
-      - name: Build
+      - name: Build (Universal)
         run: |
           mkdir build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_PREFIX_PATH=/tmp/hidapi-universal
           make -j$(sysctl -n hw.ncpu)
 
       - name: Create .app bundle
@@ -109,12 +110,12 @@ jobs:
           if [ -f resources/icon.icns ]; then
             cp resources/icon.icns "$APP/Contents/Resources/icon.icns"
           fi
-          cd dist && zip -r ../stepmaniax-gif-maker-${{ matrix.name }}.zip "StepManiaX GIF Maker.app"
+          cd dist && zip -r ../stepmaniax-gif-maker-macos-universal.zip "StepManiaX GIF Maker.app"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: stepmaniax-gif-maker-${{ matrix.name }}.zip
+          name: macos-universal
+          path: stepmaniax-gif-maker-macos-universal.zip
 
   build-windows:
     runs-on: windows-latest
@@ -135,7 +136,7 @@ jobs:
 
       - name: Package
         run: |
-          mkdir dist
+          New-Item -ItemType Directory -Force -Path dist
           copy build\Release\stepmaniax-gif-maker.exe dist\
           Compress-Archive -Path dist\* -DestinationPath stepmaniax-gif-maker-windows-x64.zip
         shell: pwsh
@@ -160,7 +161,6 @@ jobs:
         with:
           files: |
             stepmaniax-gif-maker-linux-x64.tar.gz
-            stepmaniax-gif-maker-macos-arm64.zip
-            stepmaniax-gif-maker-macos-x64.zip
+            stepmaniax-gif-maker-macos-universal.zip
             stepmaniax-gif-maker-windows-x64.zip
           generate_release_notes: true
