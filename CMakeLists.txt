@@ -39,6 +39,7 @@ FetchContent_Declare(
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_HIDAPI OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(SDL3)
 
 # --- Dear ImGui ---
