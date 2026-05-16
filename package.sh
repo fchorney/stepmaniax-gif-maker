@@ -59,9 +59,9 @@ EOF
     <key>CFBundleIdentifier</key>
     <string>com.fchorney.stepmaniax-gif-maker</string>
     <key>CFBundleVersion</key>
-    <string>0.1.1</string>
+    <string>0.1.2</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.1</string>
+    <string>0.1.2</string>
     <key>CFBundleExecutable</key>
     <string>stepmaniax-gif-maker</string>
     <key>CFBundleIconFile</key>
