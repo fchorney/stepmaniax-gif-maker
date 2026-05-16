@@ -1,0 +1,166 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p dist/stepmaniax-gif-maker
+          cp build/stepmaniax-gif-maker dist/stepmaniax-gif-maker/
+          # Desktop file
+          cat > dist/stepmaniax-gif-maker/stepmaniax-gif-maker.desktop << EOF
+          [Desktop Entry]
+          Name=StepManiaX GIF Maker
+          Comment=Pixel editor for SMX pad LED animations
+          Exec=stepmaniax-gif-maker
+          Icon=stepmaniax-gif-maker
+          Terminal=false
+          Type=Application
+          Categories=Graphics;
+          EOF
+          if [ -f resources/icon.png ]; then
+            cp resources/icon.png dist/stepmaniax-gif-maker/stepmaniax-gif-maker.png
+          fi
+          tar -czf stepmaniax-gif-maker-linux-x64.tar.gz -C dist stepmaniax-gif-maker
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: stepmaniax-gif-maker-linux-x64.tar.gz
+
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            name: macos-arm64
+          - runner: macos-13
+            arch: x86_64
+            name: macos-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: brew install hidapi
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Create .app bundle
+        run: |
+          APP="dist/StepManiaX GIF Maker.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+          cp build/stepmaniax-gif-maker "$APP/Contents/MacOS/stepmaniax-gif-maker"
+          cat > "$APP/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>StepManiaX GIF Maker</string>
+              <key>CFBundleDisplayName</key>
+              <string>StepManiaX GIF Maker</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.fchorney.stepmaniax-gif-maker</string>
+              <key>CFBundleVersion</key>
+              <string>${GITHUB_REF_NAME#v}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${GITHUB_REF_NAME#v}</string>
+              <key>CFBundleExecutable</key>
+              <string>stepmaniax-gif-maker</string>
+              <key>CFBundleIconFile</key>
+              <string>icon</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSMinimumSystemVersion</key>
+              <string>11.0</string>
+          </dict>
+          </plist>
+          EOF
+          if [ -f resources/icon.icns ]; then
+            cp resources/icon.icns "$APP/Contents/Resources/icon.icns"
+          fi
+          cd dist && zip -r ../stepmaniax-gif-maker-${{ matrix.name }}.zip "StepManiaX GIF Maker.app"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: stepmaniax-gif-maker-${{ matrix.name }}.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: vcpkg install hidapi:x64-windows
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -A x64
+          cmake --build . --config Release
+        shell: pwsh
+
+      - name: Package
+        run: |
+          mkdir dist
+          copy build\Release\stepmaniax-gif-maker.exe dist\
+          Compress-Archive -Path dist\* -DestinationPath stepmaniax-gif-maker-windows-x64.zip
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: stepmaniax-gif-maker-windows-x64.zip
+
+  release:
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            stepmaniax-gif-maker-linux-x64.tar.gz
+            stepmaniax-gif-maker-macos-arm64.zip
+            stepmaniax-gif-maker-macos-x64.zip
+            stepmaniax-gif-maker-windows-x64.zip
+          generate_release_notes: true

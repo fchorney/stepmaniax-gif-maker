@@ -11,7 +11,9 @@
 #include <SMX.h>
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <ctime>
 #include <fstream>
+#include <mutex>
 #include <string>
 
 // Global file dialog state (defined here, declared extern in app_state.h)
@@ -24,6 +26,27 @@ std::string g_compositePrsPath;
 bool g_compositeRelRequested = false;
 bool g_compositePrsRequested = false;
 std::atomic<int> g_uploadProgress{0};
+
+// --- Logging ---
+static FILE *g_logFile = nullptr;
+static std::mutex g_logMutex;
+
+static void LogWrite(const char *msg)
+{
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    if (!g_logFile) return;
+    time_t now = time(nullptr);
+    struct tm *t = localtime(&now);
+    fprintf(g_logFile, "[%04d-%02d-%02d %02d:%02d:%02d] %s\n",
+        t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+        t->tm_hour, t->tm_min, t->tm_sec, msg);
+    fflush(g_logFile);
+}
+
+static void SMXLogCb(const char *log)
+{
+    LogWrite(log);
+}
 
 // SMX SDK callback (unused, but required)
 static void SMXUpdateCb(int pad, SMXUpdateCallbackReason reason, void *pUser)
@@ -39,6 +62,7 @@ int main(int, char**)
         return 1;
     }
 
+    SMX_SetLogCallback(SMXLogCb);
     SMX_Start(SMXUpdateCb, nullptr);
 
     SDL_Window *window = SDL_CreateWindow(
@@ -77,6 +101,15 @@ int main(int, char**)
                 out << kDefaultImGuiIni;
         }
         io.IniFilename = iniPath.c_str();
+    }
+
+    // Open log file
+    if (!configDir.empty())
+    {
+        std::string logPath = configDir + "/stepmaniax-gif-maker.log";
+        g_logFile = fopen(logPath.c_str(), "a");
+        if (g_logFile)
+            LogWrite("--- Application started ---");
     }
 
     // Style
@@ -169,6 +202,11 @@ int main(int, char**)
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SMX_Stop();
+    if (g_logFile)
+    {
+        LogWrite("--- Application stopped ---");
+        fclose(g_logFile);
+    }
     SDL_Quit();
     return 0;
 }

@@ -1,0 +1,58 @@
+name: Bug Report
+description: Report a bug in StepManiaX GIF Maker
+labels: [bug]
+body:
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g., Ubuntu 24.04, macOS 15.1, Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: What did you do leading up to the bug?
+      placeholder: |
+        1. Open the app
+        2. Create a new Modern animation
+        3. Draw on panel 4
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: gif_file
+    attributes:
+      label: GIF File
+      description: If the bug involves a specific GIF, please attach it here.
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware Info (if applicable)
+      description: Pad firmware version, which panels are affected, connection details.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, error messages, or anything else that might help.

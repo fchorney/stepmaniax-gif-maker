@@ -1,0 +1,3 @@
+// Windows application icon resource
+// Place icon.ico in this directory
+IDI_ICON1 ICON "icon.ico"

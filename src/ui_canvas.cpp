@@ -86,8 +86,9 @@ void RenderCanvas(AppState &app)
         ImGui::SameLine();
         ImGui::Text("R:%d G:%d B:%d", drawColor.r, drawColor.g, drawColor.b);
         ImGui::Separator();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         ImGui::ColorPicker3("##color", (float *)&app.currentColor,
-            ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview);
+            ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_PickerHueBar);
         ImGui::Separator();
         ImGui::Text("Panel Colors (all frames):");
         for (int p = 0; p < 9; p++)

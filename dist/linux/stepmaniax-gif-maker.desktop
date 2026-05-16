@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=StepManiaX GIF Maker
+Comment=Pixel editor for SMX pad LED animations
+Exec=stepmaniax-gif-maker
+Icon=stepmaniax-gif-maker
+Terminal=false
+Type=Application
+Categories=Graphics;

@@ -63,7 +63,7 @@ set(BUILD_INTEGRATION_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${SMX_SDK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/smx-sdk-mp)
 
 # --- Main executable ---
-add_executable(stepmaniax-gif-maker
+set(APP_SOURCES
     src/main.cpp
     src/ui_menus.cpp
     src/ui_canvas.cpp
@@ -76,5 +76,17 @@ add_executable(stepmaniax-gif-maker
     src/gif_import.cpp
     src/undo.cpp
 )
+
+# Windows app icon
+if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.ico")
+    list(APPEND APP_SOURCES resources/app.rc)
+endif()
+
+add_executable(stepmaniax-gif-maker ${APP_SOURCES})
 target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)
+
+# Hide console window on Windows release builds
+if(WIN32)
+    set_target_properties(stepmaniax-gif-maker PROPERTIES WIN32_EXECUTABLE $<CONFIG:Release>)
+endif()
