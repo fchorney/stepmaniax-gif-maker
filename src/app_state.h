@@ -27,7 +27,8 @@ struct AppState
 
     int tool = Tool_Draw;
     ImVec4 currentColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
-    float cellSize = 20.0f;
+    float cellSize = 28.0f;
+    float previewZoom = 15.0f;
     bool strokeActive = false;
     int rightClickPanel = -1;
     std::vector<Color> panelClipboard;

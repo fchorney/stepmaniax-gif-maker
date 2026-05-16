@@ -8,6 +8,8 @@
 #include <fstream>
 #include <sys/stat.h>
 
+#define ICON_EXTERNAL_LINK "\xc2\xbb" // Unicode right-pointing double angle quotation mark (>>)
+
 using namespace std;
 
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
@@ -53,6 +55,7 @@ static void UploadProgressCb(int progress, void *pUser)
 void RenderMenus(AppState &app, SDL_Window *window)
 {
     ImGuiIO &io = ImGui::GetIO();
+    static bool showAbout = false;
 
     // Deferred file open dialog (needs to happen after popups close)
     if (app.deferOpenDialog)
@@ -380,6 +383,17 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 SMX_ReenableAutoLights();
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Help"))
+        {
+            if (ImGui::MenuItem("Guide " ICON_EXTERNAL_LINK))
+                SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker/blob/main/docs/guide.md");
+            if (ImGui::MenuItem("Report Issue " ICON_EXTERNAL_LINK))
+                SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker/issues/new");
+            ImGui::Separator();
+            if (ImGui::MenuItem("About"))
+                showAbout = true;
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
     }
 
@@ -464,6 +478,12 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.undo.SetMaxHistory(app.prefs.maxUndoHistory);
         }
         ImGui::Checkbox("Prompt on unsaved changes", &app.prefs.promptOnUnsaved);
+
+        static const char *modeLabels[] = { "Modern (23x24)", "Legacy (14x15)" };
+        int modeIdx = (app.prefs.mode == "legacy") ? 1 : 0;
+        ImGui::SetNextItemWidth(160);
+        if (ImGui::Combo("Default Mode", &modeIdx, modeLabels, 2))
+            app.prefs.mode = (modeIdx == 1) ? "legacy" : "modern";
 
         ImGui::Separator();
         ImGui::SameLine();
@@ -930,5 +950,40 @@ void RenderMenus(AppState &app, SDL_Window *window)
             else
                 app.running = false;
         }
+    }
+
+    // --- About Window ---
+    if (showAbout)
+        ImGui::OpenPopup("About##modal");
+    if (ImGui::BeginPopupModal("About##modal", &showAbout, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+    {
+        ImGui::Text("StepManiaX GIF Maker");
+        ImGui::Text("Version %s", SMX_GIF_MAKER_VERSION);
+        ImGui::Separator();
+        ImGui::Text("Created by Fernando Chorney");
+        ImGui::Spacing();
+        ImGui::Text("Acknowledgments:");
+        ImGui::BulletText("StepRevolution - creators of StepManiaX");
+        ImGui::BulletText("stepmaniax-sdk - original SDK by Step Revolution");
+        ImGui::BulletText("stepmaniax-sdk-mp - cross-platform SDK rewrite");
+        ImGui::Spacing();
+        ImGui::Text("Built with:");
+        ImGui::BulletText("Dear ImGui - immediate-mode GUI framework");
+        ImGui::BulletText("SDL3 - cross-platform windowing");
+        ImGui::BulletText("hidapi - USB HID communication");
+        ImGui::BulletText("nlohmann/json - JSON for Modern C++");
+        ImGui::BulletText("gif_load - single-header GIF decoder");
+        ImGui::Spacing();
+        ImGui::Text("License: MIT");
+        ImGui::Spacing();
+        if (ImGui::TextLink("github.com/fchorney/stepmaniax-gif-maker"))
+            SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker");
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(120, 0)))
+        {
+            showAbout = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }

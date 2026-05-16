@@ -9,14 +9,13 @@ void RenderPreview(AppState &app)
     ImGui::Begin("Preview");
     {
         static bool hwColors = false;
-        static float previewZoom = 6.0f;
         static bool previewPlaying = false;
         static double previewLastTime = 0;
         static int previewFrame = 0;
 
-        ImGui::Checkbox("Hardware colors (66%%)", &hwColors);
+        ImGui::Checkbox("Hardware colors (66%)", &hwColors);
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview with the 66%% color scaling applied by hardware"); ImGui::EndTooltip(); }
-        ImGui::SliderFloat("Zoom##prev", &previewZoom, 3.0f, 15.0f, "%.0f");
+        ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 15.0f, "%.0f");
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
 
         if (!previewPlaying)
@@ -63,25 +62,25 @@ void RenderPreview(AppState &app)
         const auto &frame = app.canvas.frames[displayFrame];
         int w = app.canvas.Width();
         ImDrawList *draw = ImGui::GetWindowDrawList();
-        float ledSpacing = previewZoom;
-        float panelGap = previewZoom * 0.8f;
+        float ledSpacing = app.previewZoom;
+        float panelGap = app.previewZoom * 0.8f;
 
         int outerGrid = 4;
         float outerSpan = (outerGrid - 1) * ledSpacing;
         float panelSize = outerSpan + ledSpacing * 2;
         float totalSize = panelSize * 3 + panelGap * 2;
 
-        // Center in available space
+        // Center horizontally in available space
         ImVec2 avail = ImGui::GetContentRegionAvail();
         float offsetX = (avail.x > totalSize) ? (avail.x - totalSize) * 0.5f : 0;
-        float offsetY = (avail.y > totalSize + 30) ? (avail.y - totalSize - 30) * 0.5f : 0;
-        if (offsetX > 0 || offsetY > 0)
-            ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + offsetX, ImGui::GetCursorPosY() + offsetY));
+        if (offsetX > 0)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0f);
 
         ImVec2 origin = ImGui::GetCursorScreenPos();
         draw->AddRectFilled(origin, ImVec2(origin.x + totalSize, origin.y + totalSize), IM_COL32(20, 20, 20, 255));
 
-        float ledRadius = previewZoom * 0.35f;
+        float ledRadius = app.previewZoom * 0.35f;
 
         for (int panel = 0; panel < 9; panel++)
         {
@@ -165,14 +164,14 @@ void RenderPreview(AppState &app)
             }
         }
 
-        ImGui::Dummy(ImVec2(totalSize, totalSize));
+        ImGui::Dummy(ImVec2(totalSize, totalSize + 15.0f));
 
         // Ctrl+scroll to zoom preview
         if (ImGui::IsItemHovered() && (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && io.MouseWheel != 0)
         {
-            previewZoom += io.MouseWheel * 1.0f;
-            if (previewZoom < 3.0f) previewZoom = 3.0f;
-            if (previewZoom > 15.0f) previewZoom = 15.0f;
+            app.previewZoom += io.MouseWheel * 1.0f;
+            if (app.previewZoom < 3.0f) app.previewZoom = 3.0f;
+            if (app.previewZoom > 15.0f) app.previewZoom = 15.0f;
         }
     }
     ImGui::End();

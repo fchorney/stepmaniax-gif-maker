@@ -65,8 +65,15 @@ int main(int, char**)
     SMX_SetLogCallback(SMXLogCb);
     SMX_Start(SMXUpdateCb, nullptr);
 
+    // App state (load early so we can use prefs for window size)
+    AppState app;
+    std::string configDir = GetConfigDir();
+    static std::string iniPath = configDir + "/imgui.ini";
+    std::string prefsPath = configDir + "/preferences.json";
+    app.prefs.Load(prefsPath);
+
     SDL_Window *window = SDL_CreateWindow(
-        "StepManiaX GIF Maker", 1280, 720,
+        "StepManiaX GIF Maker", app.prefs.windowWidth, app.prefs.windowHeight,
         SDL_WINDOW_RESIZABLE);
     if (!window)
     {
@@ -87,10 +94,7 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Set up config directory for imgui.ini and preferences
-    std::string configDir = GetConfigDir();
-    static std::string iniPath = configDir + "/imgui.ini";
-    std::string prefsPath = configDir + "/preferences.json";
+    // Set up config directory for imgui.ini
     if (!configDir.empty())
     {
         std::ifstream test(iniPath);
@@ -124,11 +128,11 @@ int main(int, char**)
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-    // App state
-    AppState app;
-    app.prefs.Load(prefsPath);
+    // Initialize canvas and undo from loaded prefs
     app.canvas.Init(app.prefs.mode == "legacy" ? CanvasMode::Legacy : CanvasMode::Modern);
     app.undo.SetMaxHistory(app.prefs.maxUndoHistory);
+    app.cellSize = app.prefs.canvasZoom;
+    app.previewZoom = app.prefs.previewZoom;
     app.undo.SaveState(app.canvas, "Initial");
 
     while (app.running)
@@ -194,6 +198,12 @@ int main(int, char**)
 
     // Save preferences
     app.prefs.mode = (app.canvas.mode == CanvasMode::Modern) ? "modern" : "legacy";
+    int w, h;
+    SDL_GetWindowSize(window, &w, &h);
+    app.prefs.windowWidth = w;
+    app.prefs.windowHeight = h;
+    app.prefs.canvasZoom = app.cellSize;
+    app.prefs.previewZoom = app.previewZoom;
     app.prefs.Save(prefsPath);
 
     ImGui_ImplSDLRenderer3_Shutdown();

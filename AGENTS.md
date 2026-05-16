@@ -7,7 +7,7 @@
 ## Technology Stack
 
 - **Framework:** Dear ImGui (docking branch) + SDL3 (C++17)
-- **Build:** CMake 3.20+ with FetchContent for ImGui, SDL3, nlohmann/json
+- **Build:** CMake 3.20+ with FetchContent for ImGui, SDL3, nlohmann/json, hidapi
 - **SDK:** stepmaniax-sdk-mp (git submodule at `src/vendor/stepmaniax-sdk-mp`)
 - **GIF Decode:** gif_load.h (from SDK vendor, public domain)
 - **GIF Encode:** Custom uncompressed LZW encoder (no external dependency)
@@ -21,6 +21,11 @@
 ├── TODO.md
 ├── README.md
 ├── LICENSE
+├── THIRD_PARTY_LICENSES
+├── bump-version.sh
+├── docs/
+│   ├── guide.md              # User guide with feature documentation
+│   └── screenshots/          # Screenshots for guide and README
 ├── src/
 │   ├── main.cpp              # Application entry, SDL/ImGui init, event loop
 │   ├── app_state.h           # Shared application state struct passed to all modules
@@ -36,7 +41,7 @@
 │   ├── ui_preview.h/cpp      # LED preview panel and undo history panel
 │   ├── default_layout.h      # Default ImGui window layout (embedded ini)
 │   └── vendor/
-│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.0.1)
+│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.0.2)
 └── build/
 ```
 
@@ -125,8 +130,8 @@ Stored at platform-specific paths:
 - Windows: `%UserProfile%\Documents\stepmaniax-gif-maker\`
 
 Files:
-- `imgui.ini` — window layout (managed by ImGui)
-- `preferences.json` — keybindings, recent files, settings
+- `imgui.ini` - window layout (managed by ImGui)
+- `preferences.json` - keybindings, recent files, window size, zoom levels, settings
 
 ### GIF Encoder Design
 
@@ -143,7 +148,7 @@ Custom encoder chosen over libraries for exact palette control:
 - **Braces:** Same line for control flow (`if`, `for`, `while`), next line for function/class definitions
 - **Naming:**
   - Functions/methods: PascalCase (`GetInputState`, `AddFrame`)
-  - Member variables: plain camelCase or descriptive names (no `m_` prefix — our structs are simple)
+  - Member variables: plain camelCase or descriptive names (no `m_` prefix - our structs are simple)
   - Local variables: camelCase (`cellSize`, `totalFrames`, `drawColor`)
   - Constants/macros: UPPER_SNAKE_CASE
 - **`using namespace std;`** in implementation files is acceptable
@@ -153,15 +158,15 @@ Custom encoder chosen over libraries for exact palette control:
 - **Memory:** Stack allocation preferred; vectors for dynamic data; no raw new/delete
 - **Platform:** Use `#ifdef __APPLE__` / `_WIN32` for platform-specific code
 - **Dependencies:** Prefer single-header/vendored libraries; FetchContent for larger deps
-- **Build:** Self-contained (no system-installed deps beyond compiler + hidapi)
+- **Build:** Self-contained (no system-installed deps beyond compiler + libudev on Linux)
 - **Whitespace:** No trailing whitespace; files end with a newline
 
 ## Key Design Decisions
 
-1. **No .smxgifs project format** — editor works on plain GIF files; composite preview loads released+pressed separately
-2. **No multi-pad editing** — pads are independent; edit one GIF at a time
-3. **Snapshot undo over delta** — canvas is tiny (~1.6 KB/frame), simplicity wins
-4. **Custom GIF encoder over library** — exact palette control needed for SMX compatibility
-5. **gif_load.h for decode** — proven (same as SDK uses), handles all GIF complexity
-6. **SMX_SetLights2 for preview** — full editor control over playback (not SetAuto)
-7. **All-frames color counting** — firmware uses one palette per panel across all frames
+1. **No .smxgifs project format** - editor works on plain GIF files; composite preview loads released+pressed separately
+2. **No multi-pad editing** - pads are independent; edit one GIF at a time
+3. **Snapshot undo over delta** - canvas is tiny (~1.6 KB/frame), simplicity wins
+4. **Custom GIF encoder over library** - exact palette control needed for SMX compatibility
+5. **gif_load.h for decode** - proven (same as SDK uses), handles all GIF complexity
+6. **SMX_SetLights2 for preview** - full editor control over playback (not SetAuto)
+7. **All-frames color counting** - firmware uses one palette per panel across all frames

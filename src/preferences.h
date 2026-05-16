@@ -37,6 +37,10 @@ struct Preferences
     Keybindings keys;
     int maxUndoHistory = 100;
     bool promptOnUnsaved = true;
+    int windowWidth = 1440;
+    int windowHeight = 900;
+    float canvasZoom = 28.0f;
+    float previewZoom = 15.0f;
 
     void Load(const std::string &path);
     void Save(const std::string &path) const;

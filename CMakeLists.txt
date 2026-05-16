@@ -131,6 +131,7 @@ endif()
 
 add_executable(stepmaniax-gif-maker ${APP_SOURCES})
 target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_definitions(stepmaniax-gif-maker PRIVATE SMX_GIF_MAKER_VERSION="${PROJECT_VERSION}")
 target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)
 
 # When linking smx-mp statically on Windows, prevent dllimport decoration

@@ -63,6 +63,10 @@ void Preferences::Load(const std::string &path)
         if (j.contains("recent_files")) recentFiles = j["recent_files"].get<std::vector<std::string>>();
         if (j.contains("max_undo_history")) maxUndoHistory = j["max_undo_history"];
         if (j.contains("prompt_on_unsaved")) promptOnUnsaved = j["prompt_on_unsaved"];
+        if (j.contains("window_width")) windowWidth = j["window_width"];
+        if (j.contains("window_height")) windowHeight = j["window_height"];
+        if (j.contains("canvas_zoom")) canvasZoom = j["canvas_zoom"];
+        if (j.contains("preview_zoom")) previewZoom = j["preview_zoom"];
         if (j.contains("keybindings")) {
             auto &k = j["keybindings"];
             if (k.contains("draw")) keys.draw = k["draw"];
@@ -93,6 +97,10 @@ void Preferences::Save(const std::string &path) const
     j["recent_files"] = recentFiles;
     j["max_undo_history"] = maxUndoHistory;
     j["prompt_on_unsaved"] = promptOnUnsaved;
+    j["window_width"] = windowWidth;
+    j["window_height"] = windowHeight;
+    j["canvas_zoom"] = canvasZoom;
+    j["preview_zoom"] = previewZoom;
     j["keybindings"] = {
         {"draw", keys.draw},
         {"erase", keys.erase},
