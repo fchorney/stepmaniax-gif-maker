@@ -6,6 +6,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
+# --- hidapi (built from source, static) ---
+# Build hidapi as a static library so end users don't need it installed.
+set(HIDAPI_WITH_TESTS OFF CACHE BOOL "" FORCE)
+set(HIDAPI_WITH_HIDRAW ON CACHE BOOL "" FORCE)
+set(HIDAPI_WITH_LIBUSB OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    hidapi
+    GIT_REPOSITORY https://github.com/libusb/hidapi.git
+    GIT_TAG hidapi-0.15.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(hidapi)
+
+# Linux hidraw backend needs libudev
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(UDEV REQUIRED libudev)
+endif()
+
+# Make hidapi discoverable by the SMX SDK's find_package/pkg_check_modules.
+# Variables are set right before add_subdirectory below.
+
 # --- SDL3 ---
 FetchContent_Declare(
     SDL3
@@ -60,6 +83,21 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_SAMPLE OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_INTEGRATION_TESTS OFF CACHE BOOL "" FORCE)
+# Prevent the SDK from searching for hidapi — we already built it above.
+# Set as normal variables so they aren't shadowed by pkg_check_modules.
+set(HIDAPI_FOUND TRUE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(HIDAPI_LIBRARIES hidapi_hidraw)
+elseif(APPLE)
+    set(HIDAPI_LIBRARIES hidapi)
+elseif(WIN32)
+    set(HIDAPI_LIBRARIES hidapi_winapi)
+else()
+    set(HIDAPI_LIBRARIES hidapi)
+endif()
+set(HIDAPI_INCLUDE_DIRS "${hidapi_SOURCE_DIR}")
+set(HIDAPI_LIBRARY_DIRS "")
+# Skip pkg-config search in the SDK (HIDAPI_FOUND is already set)
 add_subdirectory(${SMX_SDK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/smx-sdk-mp)
 
 # --- Main executable ---

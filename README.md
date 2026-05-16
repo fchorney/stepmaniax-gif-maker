@@ -47,13 +47,13 @@ Download the latest release from the [Releases page](https://github.com/fchorney
 
 **macOS:** Unzip, drag "StepManiaX GIF Maker.app" to your Applications folder, double-click to run.
 
-**Linux:** Extract the tar.gz, run `./stepmaniax-gif-maker`. Optionally copy the `.desktop` file to `~/.local/share/applications/` for menu integration.
+**Linux:** Extract the tar.gz, run `./stepmaniax-gif-maker`. Requires `libudev` (install via `sudo apt install libudev-dev` on Debian/Ubuntu or equivalent for your distro). Optionally copy the `.desktop` file to `~/.local/share/applications/` for menu integration.
 
 **Windows:** Unzip, double-click `stepmaniax-gif-maker.exe`.
 
 ## Building
 
-Requires: CMake 3.20+, C++17 compiler, hidapi
+Requires: CMake 3.20+, C++17 compiler
 
 ```bash
 git clone --recursive https://github.com/fchorney/stepmaniax-gif-maker.git
@@ -64,7 +64,7 @@ cd stepmaniax-gif-maker
 
 ```bash
 # Install dependencies (Ubuntu/Debian)
-sudo apt install build-essential cmake libhidapi-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
+sudo apt install build-essential cmake libudev-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
 
 # Build
 mkdir build && cd build
@@ -79,7 +79,7 @@ make -j$(nproc)
 
 ```bash
 # Install dependencies (Homebrew)
-brew install cmake hidapi
+brew install cmake
 
 # Build
 mkdir build && cd build
@@ -93,12 +93,9 @@ make -j$(sysctl -n hw.ncpu)
 ### Windows
 
 ```powershell
-# Install dependencies via vcpkg
-vcpkg install hidapi:x64-windows
-
 # Build
 mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg-root]/scripts/buildsystems/vcpkg.cmake
+cmake .. -A x64
 cmake --build . --config Release
 
 # Run
@@ -111,9 +108,10 @@ Fetched automatically by CMake (no manual install needed):
 - [Dear ImGui](https://github.com/ocornut/imgui) (docking branch) — GUI framework
 - [SDL3](https://github.com/libsdl-org/SDL) — windowing and input
 - [nlohmann/json](https://github.com/nlohmann/json) — preferences storage
-
-System dependency (must be installed):
 - [hidapi](https://github.com/libusb/hidapi) — USB HID communication (required by the SMX SDK)
+
+System dependency (Linux only):
+- `libudev-dev` — required by the hidapi hidraw backend
 
 The SMX SDK is vendored as a submodule at `src/vendor/stepmaniax-sdk-mp`. Override with:
 ```bash

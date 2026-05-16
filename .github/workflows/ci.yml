@@ -13,11 +13,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            install: sudo apt-get update && sudo apt-get install -y libhidapi-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
+            install: sudo apt-get update && sudo apt-get install -y libudev-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
           - os: macos-latest
-            install: brew install hidapi
+            install: ""
           - os: windows-latest
-            install: vcpkg install hidapi:x64-windows
+            install: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -27,6 +27,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
+        if: matrix.install != ''
         run: ${{ matrix.install }}
 
       - name: Configure (Unix)
@@ -35,7 +36,7 @@ jobs:
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -A x64
+        run: cmake -B build -A x64
 
       - name: Build
         run: cmake --build build --config Release
