@@ -53,6 +53,12 @@ void FrameCallback(void *data, struct GIF_WHDR *whdr)
         int srcY = y;
         if (whdr->intr)
         {
+            // GIF interlaced frames store rows in 4 passes:
+            //   Pass 0: rows 0, 8, 16, ... (start=0, step=8)
+            //   Pass 1: rows 4, 12, 20, ... (start=4, step=8)
+            //   Pass 2: rows 2, 6, 10, ... (start=2, step=4)
+            //   Pass 3: rows 1, 3, 5, ...  (start=1, step=2)
+            // Map sequential storage index y to actual display row srcY.
             static const int starts[] = {0, 4, 2, 1};
             static const int steps[]  = {8, 8, 4, 2};
             int row = 0;
@@ -89,6 +95,9 @@ void FrameCallback(void *data, struct GIF_WHDR *whdr)
         frame.pixels[i].b = state->canvas[i * 4 + 2];
     }
 
+    // Convert GIF delay (centiseconds) to seconds.
+    // Treat 3cs (30ms) and 4cs (40ms) as exactly 1/30s since SMX hardware
+    // runs at 30 FPS and many tools round differently for that rate.
     int ms = whdr->time * 10;
     if (ms == 30 || ms == 40)
         frame.duration = 1.0f / 30.0f;

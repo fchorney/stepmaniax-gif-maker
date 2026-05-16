@@ -184,6 +184,9 @@ int Canvas::ColorCountForPanelAllFrames(int panel) const
     return (int)colors.size();
 }
 
+// Quantize a panel's palette to at most maxColors using a frequency-based approach:
+// keep the most-used colors and remap the rest to their nearest neighbor (Euclidean
+// distance in RGB space). This is simple and fast for the small palettes involved.
 void Canvas::QuantizePanel(int panel, int maxColors)
 {
     if (panel < 0 || panel > 8) return;

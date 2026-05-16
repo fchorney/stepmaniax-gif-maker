@@ -32,7 +32,10 @@ void UpdateHardware(AppState &app)
             uint16_t inputState0 = SMX_GetInputState(0);
             uint16_t inputState1 = SMX_GetInputState(1);
 
-            // Build light buffer
+            // Build light buffer: composites released + pressed animations.
+            // When a panel is pressed and a pressed GIF is loaded, pressed pixels
+            // overlay released pixels. Black in pressed = transparent (show released
+            // through), unless fillBlack is enabled (replaces black with near-black).
             char lightData[1350] = {};
             int w = app.compositeReleased.Width();
             bool modern = (app.compositeReleased.mode == CanvasMode::Modern);
@@ -166,12 +169,15 @@ void UpdateHardware(AppState &app)
             int displayFrame = app.livePreviewSync ? app.canvas.currentFrame : app.livePreviewFrame;
             if (displayFrame >= totalFrames) displayFrame = 0;
 
-            // Build light buffer (1350 bytes: 2 pads x 9 panels x 25 LEDs x 3 RGB)
+            // Build light buffer for SMX_SetLights2.
+            // Modern: 1350 bytes = 2 pads × 9 panels × 25 LEDs × 3 RGB bytes.
+            // Legacy:  864 bytes = 2 pads × 9 panels × 16 LEDs × 3 RGB bytes.
+            // Pad 0 occupies the first half; pad 1 is mirrored from pad 0 below.
             char lightData[1350] = {};
             const auto &frame = app.canvas.frames[displayFrame];
             int w = app.canvas.Width();
 
-            // Fill pad 0 (first 675 bytes)
+            // Fill pad 0 (first half of buffer: 675 bytes modern, 432 bytes legacy)
             for (int panel = 0; panel < 9; panel++)
             {
                 int col = panel % 3;

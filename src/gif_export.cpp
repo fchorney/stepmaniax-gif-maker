@@ -94,6 +94,10 @@ int PaletteBits(int paletteSize)
     return 8;
 }
 
+// Writes pixel indices as uncompressed LZW data.
+// Strategy: emit only literal codes (no dictionary entries), resetting with a
+// clear code before the implicit next code would exceed the current code size.
+// This avoids needing an LZW dictionary while producing valid GIF LZW streams.
 void WriteLzwData(GifWriter &w, const std::vector<uint8_t> &indices, int minCodeSize)
 {
     int clearCode = 1 << minCodeSize;
@@ -115,6 +119,9 @@ void WriteLzwData(GifWriter &w, const std::vector<uint8_t> &indices, int minCode
         }
     };
 
+    // Max literals before a reset: available codes minus clear and end codes.
+    // After this many literals, the next implicit code would require a larger
+    // code size, so we emit a clear code to reset instead.
     int maxLiterals = (1 << codeSize) - clearCode - 2;
     if (maxLiterals < 1) maxLiterals = 1;
 
@@ -137,6 +144,7 @@ void WriteLzwData(GifWriter &w, const std::vector<uint8_t> &indices, int minCode
     if (bitsInAccum > 0)
         buf.push_back((uint8_t)(bitAccum & 0xFF));
 
+    // Write as GIF sub-blocks: length byte followed by up to 255 data bytes
     w.WriteByte((uint8_t)minCodeSize);
     int offset = 0;
     int total = (int)buf.size();
@@ -147,7 +155,7 @@ void WriteLzwData(GifWriter &w, const std::vector<uint8_t> &indices, int minCode
         w.Write(buf.data() + offset, chunk);
         offset += chunk;
     }
-    w.WriteByte(0);
+    w.WriteByte(0); // Block terminator
 }
 
 // Shared GIF writing logic used by both ExportGif and ExportGifToMemory.
@@ -203,7 +211,9 @@ bool WriteGifData(GifWriter &gw, const Canvas &canvas, const std::vector<Color> 
             for (int x = 0; x < w; x++)
                 indices[y * w + x] = FindIndex(lookup, frame.GetPixel(x, y, w));
 
-        // Loop marker
+        // Encode loop marker: write a white pixel at bottom-left (0, h-1) on the
+        // designated loop frame. The SDK detects R>=128 at this position to know
+        // which frame to loop back to during playback.
         if (f == canvas.loopFrame && canvas.loopFrame > 0)
             indices[(h - 1) * w + 0] = FindIndex(lookup, Color{255, 255, 255});
 

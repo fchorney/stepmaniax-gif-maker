@@ -22,12 +22,18 @@
 ├── README.md
 ├── LICENSE
 ├── src/
-│   ├── main.cpp              # Application entry, UI rendering, event loop
+│   ├── main.cpp              # Application entry, SDL/ImGui init, event loop
+│   ├── app_state.h           # Shared application state struct passed to all modules
 │   ├── canvas.h/cpp          # Canvas data model (pixel buffer, panels, LED positions)
 │   ├── gif_export.h/cpp      # Custom GIF encoder (exact palettes, uncompressed LZW)
 │   ├── gif_import.h/cpp      # GIF decoder using gif_load.h
+│   ├── hardware.h/cpp        # Live preview and composite preview via SMX_SetLights2
 │   ├── preferences.h/cpp     # User preferences (JSON, platform-aware paths)
 │   ├── undo.h/cpp            # Snapshot-based undo/redo system
+│   ├── ui_canvas.h/cpp       # Canvas window, drawing tools, mouse interaction
+│   ├── ui_menus.h/cpp        # Menu bar, dialogs, keyboard shortcuts
+│   ├── ui_timeline.h/cpp     # Timeline controls, frame thumbnails, playback
+│   ├── ui_preview.h/cpp      # LED preview panel and undo history panel
 │   ├── default_layout.h      # Default ImGui window layout (embedded ini)
 │   └── vendor/
 │       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.0.1)
