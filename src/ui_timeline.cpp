@@ -126,9 +126,7 @@ void RenderTimeline(AppState &app)
             if (durMs > 2550) durMs = 2550;
             app.canvas.frames[editingDurFrame].duration = durMs / 1000.0f;
         }
-        if (ImGui::IsItemActive())
-            editingDurFrame = editingDurFrame;
-        else
+        if (!ImGui::IsItemActive())
             editingDurFrame = app.canvas.currentFrame;
         if (ImGui::IsItemDeactivatedAfterEdit())
         {
