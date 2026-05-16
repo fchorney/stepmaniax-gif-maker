@@ -127,6 +127,8 @@ cmake .. -DSMX_SDK_DIR=/path/to/stepmaniax-sdk-mp
 
 ## Usage
 
+For a detailed walkthrough of all features, see the [User Guide](docs/guide.md).
+
 1. **File → New** to create a new animation (choose Legacy 14×15 or Modern 23×24)
 2. Draw on the pixel grid - only LED positions are editable
 3. Use the timeline to add frames and set durations
