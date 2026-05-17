@@ -639,10 +639,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.showExportWarning = false;
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Open");
+            app.colorCountsDirty = true;
             if (pixelsModified)
             {
                 app.dirty = true;
-                app.colorCountsDirty = true;
             }
             else
             {
