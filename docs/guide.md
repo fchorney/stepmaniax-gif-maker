@@ -88,7 +88,8 @@ The mode is chosen when creating a new file (File → New) and cannot be changed
 Select tools from the Tools panel or use keyboard shortcuts (1–5 by default).
 
 | Extra Options | Description |
-| **Zoom** | Adjust canvas zoom (8px to 40px)
+|---------------|-------------|
+| **Zoom** | Adjust canvas zoom (8px to 40px) |
 | **Onion Skin** | Display previous or next frame overlay |
 
 ---
@@ -236,7 +237,9 @@ Load both a **released** and **pressed** animation to preview how they overlay b
 
 Write animations permanently to pad EEPROM for offline playback (no computer needed).
 
-![Firmware Upload](screenshots/firmware-upload.png)
+![Firmware Upload Released](screenshots/firmware-upload-released.png)
+
+![Firmware Upload Pressed](screenshots/firmware-upload-pressed.png)
 
 ### Requirements
 
