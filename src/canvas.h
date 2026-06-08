@@ -1,6 +1,7 @@
 #pragma once
 /// Canvas data model: pixel buffer, panels, LED positions, and frame management.
 
+#include <climits>
 #include <cstdint>
 #include <vector>
 
@@ -8,6 +9,22 @@ enum class CanvasMode
 {
     Legacy,  // 14x15, 4x4 LEDs per panel (16 LEDs)
     Modern,  // 23x24, 4x4 outer + 3x3 inner per panel (25 LEDs)
+};
+
+// Full pad (9 panels) vs a single panel. Single-panel canvases are authored for
+// deadsync host playback (per-panel judgement GIFs) and cannot be uploaded to firmware.
+enum class CanvasExtent
+{
+    FullPad,      // 3x3 grid of 9 panels
+    SinglePanel,  // one panel only
+};
+
+// Firmware = EEPROM upload target (Modern + FullPad only): 32-frame and 15-color/panel caps.
+// Host = deadsync set_lights playback: uncapped, full color, not uploadable.
+enum class CanvasTarget
+{
+    Firmware,
+    Host,
 };
 
 struct Color
@@ -32,15 +49,35 @@ struct CanvasFrame
 struct Canvas
 {
     CanvasMode mode = CanvasMode::Modern;
+    CanvasExtent extent = CanvasExtent::FullPad;
+    CanvasTarget target = CanvasTarget::Firmware;
     std::vector<CanvasFrame> frames;
     int currentFrame = 0;
     int loopFrame = 0; // frame to loop back to (0 = loop from start)
 
-    int Width() const { return mode == CanvasMode::Modern ? 23 : 14; }
-    int Height() const { return mode == CanvasMode::Modern ? 24 : 15; }
-    static constexpr int MaxFrames = 32;
+    // Canvas dimensions. Full pad is 23x24 / 14x15; a single panel is just the panel
+    // area (7x7 / 4x4) plus the trailing flag row, so 7x8 / 4x5.
+    int Width() const
+    {
+        if (extent == CanvasExtent::SinglePanel)
+            return mode == CanvasMode::Modern ? 7 : 4;
+        return mode == CanvasMode::Modern ? 23 : 14;
+    }
+    int Height() const
+    {
+        if (extent == CanvasExtent::SinglePanel)
+            return mode == CanvasMode::Modern ? 8 : 5;
+        return mode == CanvasMode::Modern ? 24 : 15;
+    }
 
-    void Init(CanvasMode m);
+    // Number of panels on the canvas (1 for single-panel, 9 for full pad).
+    int PanelCount() const { return extent == CanvasExtent::SinglePanel ? 1 : 9; }
+
+    // Frame limit. Firmware upload caps animations at 32 frames; host playback is uncapped.
+    int MaxFrames() const { return target == CanvasTarget::Firmware ? 32 : INT_MAX; }
+
+    void Init(CanvasMode m, CanvasExtent e = CanvasExtent::FullPad,
+              CanvasTarget t = CanvasTarget::Firmware);
     void AddFrame();
     void DuplicateFrame(int idx);
     void DeleteFrame(int idx);

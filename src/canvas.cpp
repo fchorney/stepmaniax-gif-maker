@@ -18,9 +18,11 @@ void CanvasFrame::SetPixel(int x, int y, int width, Color c)
         pixels[idx] = c;
 }
 
-void Canvas::Init(CanvasMode m)
+void Canvas::Init(CanvasMode m, CanvasExtent e, CanvasTarget t)
 {
     mode = m;
+    extent = e;
+    target = t;
     frames.clear();
     currentFrame = 0;
     loopFrame = 0;
@@ -29,7 +31,7 @@ void Canvas::Init(CanvasMode m)
 
 void Canvas::AddFrame()
 {
-    if ((int)frames.size() >= 32) return;
+    if ((int)frames.size() >= MaxFrames()) return;
     CanvasFrame f;
     f.pixels.resize(Width() * Height(), Color{0, 0, 0});
     if (frames.empty())
@@ -46,7 +48,7 @@ void Canvas::AddFrame()
 
 void Canvas::DuplicateFrame(int idx)
 {
-    if ((int)frames.size() >= 32) return;
+    if ((int)frames.size() >= MaxFrames()) return;
     if (idx < 0 || idx >= (int)frames.size()) return;
     CanvasFrame copy = frames[idx];
     frames.insert(frames.begin() + idx + 1, std::move(copy));
@@ -70,6 +72,9 @@ const CanvasFrame &Canvas::CurrentFrame() const { return frames[currentFrame]; }
 int Canvas::PanelAt(int x, int y) const
 {
     if (IsGutter(x, y) || IsFlagRow(x, y)) return -1;
+
+    if (extent == CanvasExtent::SinglePanel)
+        return 0; // only one panel
 
     if (mode == CanvasMode::Modern)
     {
@@ -105,6 +110,9 @@ bool Canvas::IsGutter(int x, int y) const
 {
     if (IsFlagRow(x, y)) return false;
 
+    if (extent == CanvasExtent::SinglePanel)
+        return false; // a single panel has no inter-panel gutters
+
     if (mode == CanvasMode::Modern)
         return (x == 7 || x == 15 || y == 7 || y == 15);
     else
@@ -120,6 +128,19 @@ bool Canvas::IsFlagRow(int x, int y) const
 bool Canvas::IsLedPosition(int x, int y) const
 {
     if (IsGutter(x, y) || IsFlagRow(x, y)) return false;
+
+    if (extent == CanvasExtent::SinglePanel)
+    {
+        if (mode == CanvasMode::Modern)
+        {
+            // Single 7x7 panel: outer 4x4 at even coords, inner 3x3 at odd coords (<=5).
+            if (x % 2 == 0 && y % 2 == 0) return true;
+            if (x % 2 == 1 && y % 2 == 1 && x <= 5 && y <= 5) return true;
+            return false;
+        }
+        // Legacy single 4x4 panel: every position is an LED.
+        return x < 4 && y < 4;
+    }
 
     if (mode == CanvasMode::Modern)
     {
@@ -160,7 +181,7 @@ void Canvas::ClearPanel(int panel)
 
 void Canvas::ClearAll()
 {
-    for (int p = 0; p < 9; p++)
+    for (int p = 0; p < PanelCount(); p++)
         ClearPanel(p);
 }
 

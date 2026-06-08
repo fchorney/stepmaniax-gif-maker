@@ -30,6 +30,14 @@ static void ReplaceColor(CanvasFrame &frame, int w, int h, int x, int y, Color t
                     frame.SetPixel(px, py, w, replacement);
 }
 
+// Human-readable label for the current canvas shape.
+static const char *CanvasModeLabel(const Canvas &c)
+{
+    if (c.extent == CanvasExtent::SinglePanel)
+        return c.mode == CanvasMode::Modern ? "Modern panel (7x8)" : "Legacy panel (4x5)";
+    return c.mode == CanvasMode::Modern ? "Modern (23x24)" : "Legacy (14x15)";
+}
+
 void RenderCanvas(AppState &app)
 {
     ImGuiIO &io = ImGui::GetIO();
@@ -55,7 +63,7 @@ void RenderCanvas(AppState &app)
     ImGui::SameLine(); ImGui::TextDisabled("(%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.pick));
 
     ImGui::Separator();
-    const char *modeLabel = (app.canvas.mode == CanvasMode::Modern) ? "Modern (23x24)" : "Legacy (14x15)";
+    const char *modeLabel = CanvasModeLabel(app.canvas);
     ImGui::Text("Mode: %s", modeLabel);
     ImGui::Separator();
     ImGui::SliderFloat("Zoom", &app.cellSize, 8.0f, 40.0f, "%.0f px");
@@ -91,7 +99,7 @@ void RenderCanvas(AppState &app)
             ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_PickerHueBar);
         ImGui::Separator();
         ImGui::Text("Panel Colors (all frames):");
-        for (int p = 0; p < 9; p++)
+        for (int p = 0; p < app.canvas.PanelCount(); p++)
         {
             app.RefreshColorCounts();
             int count = app.cachedColorCounts[p];
@@ -106,7 +114,7 @@ void RenderCanvas(AppState &app)
     // --- Canvas ---
     ImGui::Begin("Canvas", nullptr, ImGuiWindowFlags_HorizontalScrollbar);
     {
-        const char *modeStr = (app.canvas.mode == CanvasMode::Modern) ? "Modern (23x24)" : "Legacy (14x15)";
+        const char *modeStr = CanvasModeLabel(app.canvas);
         ImGui::Text("Mode: %s | Frame %d/%d", modeStr,
             app.canvas.currentFrame + 1, (int)app.canvas.frames.size());
         ImGui::Separator();
@@ -291,13 +299,18 @@ void RenderCanvas(AppState &app)
                     app.rightClickPanel = app.canvas.PanelAt(mx, my);
                     if (app.rightClickPanel < 0)
                     {
-                        int col = (app.canvas.mode == CanvasMode::Modern) ?
-                            (mx < 8 ? 0 : mx < 16 ? 1 : 2) :
-                            (mx < 5 ? 0 : mx < 10 ? 1 : 2);
-                        int row = (app.canvas.mode == CanvasMode::Modern) ?
-                            (my < 8 ? 0 : my < 16 ? 1 : 2) :
-                            (my < 5 ? 0 : my < 10 ? 1 : 2);
-                        app.rightClickPanel = row * 3 + col;
+                        if (app.canvas.extent == CanvasExtent::SinglePanel)
+                            app.rightClickPanel = 0;
+                        else
+                        {
+                            int col = (app.canvas.mode == CanvasMode::Modern) ?
+                                (mx < 8 ? 0 : mx < 16 ? 1 : 2) :
+                                (mx < 5 ? 0 : mx < 10 ? 1 : 2);
+                            int row = (app.canvas.mode == CanvasMode::Modern) ?
+                                (my < 8 ? 0 : my < 16 ? 1 : 2) :
+                                (my < 5 ? 0 : my < 10 ? 1 : 2);
+                            app.rightClickPanel = row * 3 + col;
+                        }
                     }
                     ImGui::OpenPopup("##canvas_ctx");
                 }
@@ -363,7 +376,7 @@ void RenderCanvas(AppState &app)
             }
             if (ImGui::MenuItem("Quantize All Panels"))
             {
-                for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
+                for (int p = 0; p < app.canvas.PanelCount(); p++) app.canvas.QuantizePanel(p);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::EndPopup();

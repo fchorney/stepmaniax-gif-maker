@@ -209,7 +209,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.frameClipboard = app.canvas.CurrentFrame();
                 app.frameClipboardValid = true;
             }
-            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < Canvas::MaxFrames))
+            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
             {
                 app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
                 app.canvas.currentFrame++;
@@ -823,19 +823,39 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("Create a new animation. This will discard current work.");
         ImGui::Separator();
-        static int newMode = 1;
-        ImGui::RadioButton("Legacy (14x15) - host playback only", &newMode, 0);
-        ImGui::RadioButton("Modern (23x24) - host playback + firmware upload", &newMode, 1);
+        static int newMode = 1;   // 0 = Legacy, 1 = Modern
+        static int newExtent = 0; // 0 = Full pad, 1 = Single panel
+        static int newTarget = 0; // 0 = Firmware, 1 = Host
+        ImGui::Text("LED format:");
+        ImGui::RadioButton("Legacy (4x4, 16 LEDs)", &newMode, 0);
+        ImGui::RadioButton("Modern (4x4 + 3x3, 25 LEDs)", &newMode, 1);
+        ImGui::Separator();
+        ImGui::Text("Canvas:");
+        ImGui::RadioButton("Full pad (9 panels)", &newExtent, 0);
+        ImGui::RadioButton("Single panel (per-panel judgement GIF)", &newExtent, 1);
+        ImGui::Separator();
+        // Firmware upload is only possible for a Modern full pad; everything else is host-only.
+        bool firmwareAllowed = (newMode == 1 && newExtent == 0);
+        if (!firmwareAllowed) newTarget = 1;
+        ImGui::Text("Target:");
+        ImGui::BeginDisabled(!firmwareAllowed);
+        ImGui::RadioButton("Firmware (EEPROM upload; 32-frame, 15-color caps)", &newTarget, 0);
+        ImGui::EndDisabled();
+        ImGui::RadioButton("Host (deadsync playback; uncapped, no upload)", &newTarget, 1);
+        if (!firmwareAllowed)
+            ImGui::TextDisabled("Only a Modern full pad can upload to firmware.");
         ImGui::Separator();
         if (ImGui::Button("Create"))
         {
             CanvasMode newCanvasMode = newMode == 1 ? CanvasMode::Modern : CanvasMode::Legacy;
-            if (newCanvasMode != app.canvas.mode)
+            CanvasExtent newCanvasExtent = newExtent == 1 ? CanvasExtent::SinglePanel : CanvasExtent::FullPad;
+            CanvasTarget newCanvasTarget = newTarget == 1 ? CanvasTarget::Host : CanvasTarget::Firmware;
+            if (newCanvasMode != app.canvas.mode || newCanvasExtent != app.canvas.extent)
             {
                 app.panelClipboard.clear();
                 app.panelClipboardValid = false;
             }
-            app.canvas.Init(newCanvasMode);
+            app.canvas.Init(newCanvasMode, newCanvasExtent, newCanvasTarget);
             app.currentFilePath.clear();
             app.dirty = false; app.undo.MarkSaved();
             app.undo.Clear();
@@ -882,7 +902,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.frameClipboard = app.canvas.CurrentFrame();
             app.frameClipboardValid = true;
         }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < Canvas::MaxFrames)
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
         {
             app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
             app.canvas.currentFrame++;

@@ -68,7 +68,8 @@ void RenderPreview(AppState &app)
         int outerGrid = 4;
         float outerSpan = (outerGrid - 1) * ledSpacing;
         float panelSize = outerSpan + ledSpacing * 2;
-        float totalSize = panelSize * 3 + panelGap * 2;
+        int gridN = (app.canvas.extent == CanvasExtent::SinglePanel) ? 1 : 3;
+        float totalSize = panelSize * gridN + panelGap * (gridN - 1);
 
         // Center horizontally in available space
         ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -82,7 +83,7 @@ void RenderPreview(AppState &app)
 
         float ledRadius = app.previewZoom * 0.35f;
 
-        for (int panel = 0; panel < 9; panel++)
+        for (int panel = 0; panel < app.canvas.PanelCount(); panel++)
         {
             int pcol = panel % 3;
             int prow = panel / 3;

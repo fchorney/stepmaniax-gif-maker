@@ -4,6 +4,8 @@ project(stepmaniax-gif-maker VERSION 0.1.3 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(GIFMAKER_BUILD_TESTS "Build headless unit tests (doctest)" ON)
+
 include(FetchContent)
 
 # --- hidapi (built from source, static) ---
@@ -140,4 +142,37 @@ if(WIN32)
     # Hide console window in Release builds (keep main() as entry point)
     target_link_options(stepmaniax-gif-maker PRIVATE
         $<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>)
+endif()
+
+# --- Tests ---
+# Headless unit tests for the pure logic (canvas geometry, GIF encode/decode).
+# Links only the GUI-independent translation units, so no SDL/ImGui/SDK/hardware is needed.
+if(GIFMAKER_BUILD_TESTS)
+    # Fetch doctest as a header only. Its bundled CMakeLists declares a cmake_minimum_required
+    # too old for current CMake, so we skip its add_subdirectory (SOURCE_SUBDIR points at a
+    # directory with no CMakeLists) and expose the single header via an INTERFACE target.
+    FetchContent_Declare(
+        doctest
+        GIT_REPOSITORY https://github.com/doctest/doctest.git
+        GIT_TAG v2.4.11
+        GIT_SHALLOW TRUE
+        SOURCE_SUBDIR do-not-build
+    )
+    FetchContent_MakeAvailable(doctest)
+    add_library(doctest_header INTERFACE)
+    target_include_directories(doctest_header INTERFACE ${doctest_SOURCE_DIR})
+
+    add_executable(gifmaker_tests
+        tests/test_main.cpp
+        tests/test_canvas_geometry.cpp
+        tests/test_gif_roundtrip.cpp
+        src/canvas.cpp
+        src/gif_export.cpp
+        src/gif_import.cpp
+    )
+    target_include_directories(gifmaker_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(gifmaker_tests PRIVATE doctest_header)
+
+    enable_testing()
+    add_test(NAME gifmaker_tests COMMAND gifmaker_tests)
 endif()

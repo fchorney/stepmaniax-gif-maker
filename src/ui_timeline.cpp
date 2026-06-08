@@ -82,7 +82,7 @@ void RenderTimeline(AppState &app)
         if (ImGui::Button("-") && totalFrames > 1) { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Delete frame (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.deleteFrame)); ImGui::EndTooltip(); }
         ImGui::SameLine();
-        bool atFrameLimit = (totalFrames >= Canvas::MaxFrames);
+        bool atFrameLimit = (totalFrames >= app.canvas.MaxFrames());
         if (atFrameLimit) ImGui::BeginDisabled();
         if (ImGui::Button("Dup")) { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Duplicate frame (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.dupFrame)); ImGui::EndTooltip(); }
@@ -155,9 +155,9 @@ void RenderTimeline(AppState &app)
                 app.canvas.currentFrame = 0;
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.lastFrame))
                 app.canvas.currentFrame = totalFrames - 1;
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.addFrame) && totalFrames < Canvas::MaxFrames)
+            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.addFrame) && totalFrames < app.canvas.MaxFrames())
                 { app.canvas.AddFrame(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.dupFrame) && totalFrames < Canvas::MaxFrames)
+            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.dupFrame) && totalFrames < app.canvas.MaxFrames())
                 { app.canvas.DuplicateFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Duplicate Frame"); }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.deleteFrame) && totalFrames > 1)
                 { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
@@ -245,7 +245,7 @@ void RenderTimeline(AppState &app)
                     app.frameClipboard = app.canvas.frames[f];
                     app.frameClipboardValid = true;
                 }
-                if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < Canvas::MaxFrames))
+                if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
                 {
                     app.canvas.frames.insert(app.canvas.frames.begin() + f + 1, app.frameClipboard);
                     app.canvas.currentFrame = f + 1;
@@ -284,10 +284,12 @@ void RenderTimeline(AppState &app)
         // Frame info at bottom left
         ImGui::Text("Frame %d / %d", app.canvas.currentFrame + 1, (int)app.canvas.frames.size());
         ImGui::SameLine();
-        if ((int)app.canvas.frames.size() >= Canvas::MaxFrames)
-            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d max)", Canvas::MaxFrames);
+        if (app.canvas.target == CanvasTarget::Host)
+            ImGui::TextDisabled("(uncapped)");
+        else if ((int)app.canvas.frames.size() >= app.canvas.MaxFrames())
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d max)", app.canvas.MaxFrames());
         else
-            ImGui::TextDisabled("(%d max)", Canvas::MaxFrames);
+            ImGui::TextDisabled("(%d max)", app.canvas.MaxFrames());
     }
     ImGui::End();
 }
