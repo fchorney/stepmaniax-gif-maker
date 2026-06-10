@@ -378,7 +378,12 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 ImGui::EndMenu();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Composite Preview...", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+            // Composite preview plays full-pad GIFs across the whole stage, so it
+            // is disabled for single-panel canvases like the other full-pad-only
+            // hardware actions.
+            if (ImGui::MenuItem("Composite Preview...", nullptr, false,
+                                (info0.m_bConnected || info1.m_bConnected) &&
+                                    app.canvas.extent == CanvasExtent::FullPad))
                 app.showCompositeDialog = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
