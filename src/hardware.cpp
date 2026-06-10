@@ -208,7 +208,12 @@ void UpdateHardware(AppState &app)
                     app.livePreviewFrameTime -= dur;
                     app.livePreviewFrame++;
                     if (app.livePreviewFrame >= totalFrames)
-                        app.livePreviewFrame = app.canvas.loopFrame;
+                    {
+                        if (app.loopPlayback)
+                            app.livePreviewFrame = app.canvas.loopFrame;
+                        else
+                            app.livePreviewFrame = totalFrames - 1; // one-shot: hold last frame
+                    }
                 }
             }
 

@@ -31,6 +31,7 @@ struct AppState
     float previewZoom = 15.0f;
     float previewSpeed = 1.0f; // playback/preview speed multiplier; never affects saved timing
     int singlePanelPreviewSlot = 1; // which physical pad panel (0..8) lights a single-panel canvas
+    bool loopPlayback = true; // when false, playback runs once and stops on the last frame
     bool strokeActive = false;
     int rightClickPanel = -1;
     std::vector<Color> panelClipboard;

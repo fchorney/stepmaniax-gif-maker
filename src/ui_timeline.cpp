@@ -24,7 +24,15 @@ void RenderTimeline(AppState &app)
                 lastFrameTime = now;
                 app.canvas.currentFrame++;
                 if (app.canvas.currentFrame >= totalFrames)
-                    app.canvas.currentFrame = app.canvas.loopFrame;
+                {
+                    if (app.loopPlayback)
+                        app.canvas.currentFrame = app.canvas.loopFrame;
+                    else
+                    {
+                        app.canvas.currentFrame = totalFrames - 1; // hold on the last frame
+                        playing = false;                            // one-shot: stop
+                    }
+                }
             }
         }
 
@@ -37,6 +45,8 @@ void RenderTimeline(AppState &app)
             {
                 playing = true;
                 lastFrameTime = ImGui::GetTime();
+                if (app.canvas.currentFrame >= totalFrames - 1)
+                    app.canvas.currentFrame = 0; // replay from the start if parked at the end
             }
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Play animation (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.playPause)); ImGui::EndTooltip(); }
         }
@@ -54,6 +64,9 @@ void RenderTimeline(AppState &app)
             lastFrameTime = ImGui::GetTime();
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Play from frame 0"); ImGui::EndTooltip(); }
+        ImGui::SameLine();
+        ImGui::Checkbox("Loop", &app.loopPlayback);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("When off, playback plays once and stops on the last frame");
 
         // --- Move ---
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
@@ -179,7 +192,12 @@ void RenderTimeline(AppState &app)
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.playPause))
             {
                 playing = !playing;
-                if (playing) lastFrameTime = ImGui::GetTime();
+                if (playing)
+                {
+                    lastFrameTime = ImGui::GetTime();
+                    if (app.canvas.currentFrame >= totalFrames - 1)
+                        app.canvas.currentFrame = 0;
+                }
             }
         }
 
@@ -188,7 +206,9 @@ void RenderTimeline(AppState &app)
         // Frame thumbnails
         int w = app.canvas.Width();
         int h = app.canvas.Height() - 1; // skip flag row
-        float thumbScale = 2.0f;
+        // Scale each thumbnail to a consistent on-screen size so a single panel renders as
+        // large as a full pad rather than a tiny block.
+        float thumbScale = 46.0f / (float)std::max(w, h);
         float thumbW = w * thumbScale;
         float thumbH = h * thumbScale;
 

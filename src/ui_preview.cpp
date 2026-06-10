@@ -42,7 +42,7 @@ void RenderPreview(AppState &app)
 
         if (!previewPlaying)
         {
-            if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = app.canvas.currentFrame; }
+            if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = app.canvas.currentFrame; if (previewFrame >= (int)app.canvas.frames.size() - 1) previewFrame = 0; }
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Play animation in preview"); ImGui::EndTooltip(); }
         }
         else
@@ -72,7 +72,15 @@ void RenderPreview(AppState &app)
                 previewLastTime = now;
                 previewFrame++;
                 if (previewFrame >= totalFrames)
-                    previewFrame = app.canvas.loopFrame;
+                {
+                    if (app.loopPlayback)
+                        previewFrame = app.canvas.loopFrame;
+                    else
+                    {
+                        previewFrame = totalFrames - 1;
+                        previewPlaying = false;
+                    }
+                }
             }
         }
 
