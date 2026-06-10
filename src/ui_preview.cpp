@@ -18,6 +18,28 @@ void RenderPreview(AppState &app)
         ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 40.0f, "%.0f");
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
 
+        // Which physical pad panel a single-panel canvas lights during live hardware preview.
+        if (app.canvas.extent == CanvasExtent::SinglePanel)
+        {
+            static const char *slotNames[9] = {
+                "Top-left", "Up", "Top-right",
+                "Left", "Center", "Right",
+                "Bottom-left", "Down", "Bottom-right"
+            };
+            int &slot = app.singlePanelPreviewSlot;
+            if (slot < 0 || slot > 8) slot = 1;
+            ImGui::SetNextItemWidth(140);
+            if (ImGui::BeginCombo("Pad slot", slotNames[slot]))
+            {
+                for (int i = 0; i < 9; i++)
+                    if (ImGui::Selectable(slotNames[i], slot == i))
+                        slot = i;
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Which physical pad panel lights up during live hardware preview");
+        }
+
         if (!previewPlaying)
         {
             if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = app.canvas.currentFrame; }
