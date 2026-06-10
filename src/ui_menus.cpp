@@ -155,9 +155,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Save", SHORTCUT_MOD "+S"))
             {
                 bool overLimit = false;
-                for (int p = 0; p < 9; p++)
-                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                        overLimit = true;
+                if (app.canvas.target == CanvasTarget::Firmware)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                            overLimit = true;
                 if (overLimit)
                     app.showExportWarning = true;
                 else if (app.currentFilePath.empty())
@@ -178,9 +179,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Save As...", SHORTCUT_MOD "+Shift+S"))
             {
                 bool overLimit = false;
-                for (int p = 0; p < 9; p++)
-                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                        overLimit = true;
+                if (app.canvas.target == CanvasTarget::Firmware)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                            overLimit = true;
                 if (overLimit)
                     app.showExportWarning = true;
                 else
@@ -218,7 +220,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::Separator();
             if (ImGui::BeginMenu("Clear Panel"))
             {
-                for (int p = 0; p < 9; p++)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[16];
                     snprintf(label, sizeof(label), "Panel %d", p);
@@ -227,9 +229,9 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 ImGui::EndMenu();
             }
             if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
-            if (ImGui::BeginMenu("Quantize Panel"))
+            if (ImGui::BeginMenu("Quantize Panel", app.canvas.target == CanvasTarget::Firmware))
             {
-                for (int p = 0; p < 9; p++)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[32];
                     snprintf(label, sizeof(label), "Panel %d", p);
@@ -237,9 +239,9 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Quantize All Panels"))
+            if (ImGui::MenuItem("Quantize All Panels", nullptr, false, app.canvas.target == CanvasTarget::Firmware))
             {
-                for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
+                for (int p = 0; p < app.canvas.PanelCount(); p++) app.canvas.QuantizePanel(p);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
@@ -283,7 +285,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     app.livePreviewFrameTime = 0;
                 }
             }
-            if (ImGui::BeginMenu("Upload to Firmware", info0.m_bConnected || info1.m_bConnected))
+            if (ImGui::BeginMenu("Upload to Firmware", (info0.m_bConnected || info1.m_bConnected) && app.canvas.target == CanvasTarget::Firmware))
             {
                 auto doUpload = [&](bool pad0, bool pad1, SMX_LightsType type, bool fillBlack = false) {
                     if (app.canvas.mode != CanvasMode::Modern)
@@ -912,9 +914,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             bool overLimit = false;
-            for (int p = 0; p < 9; p++)
-                if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                    overLimit = true;
+            if (app.canvas.target == CanvasTarget::Firmware)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
             if (overLimit)
                 app.showExportWarning = true;
             else if (app.currentFilePath.empty())
@@ -935,9 +938,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             bool overLimit = false;
-            for (int p = 0; p < 9; p++)
-                if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                    overLimit = true;
+            if (app.canvas.target == CanvasTarget::Firmware)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
             if (overLimit)
                 app.showExportWarning = true;
             else

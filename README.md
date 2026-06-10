@@ -196,8 +196,8 @@ Files:
 | `mode` | string | `"modern"` | Default canvas mode (`"modern"` or `"legacy"`) |
 | `window_width` | int | 1440 | Window width in pixels |
 | `window_height` | int | 900 | Window height in pixels |
-| `canvas_zoom` | float | 28.0 | Canvas editor zoom level (8–40) |
-| `preview_zoom` | float | 15.0 | LED preview zoom level (3–15) |
+| `canvas_zoom` | float | 28.0 | Canvas editor zoom level (8–80) |
+| `preview_zoom` | float | 15.0 | LED preview zoom level (3–40) |
 | `max_undo_history` | int | 100 | Maximum number of undo states |
 | `prompt_on_unsaved` | bool | true | Warn before closing with unsaved changes |
 | `recent_files` | array | `[]` | List of recently opened file paths (max 20) |

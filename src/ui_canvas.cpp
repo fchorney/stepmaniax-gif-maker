@@ -66,7 +66,7 @@ void RenderCanvas(AppState &app)
     const char *modeLabel = CanvasModeLabel(app.canvas);
     ImGui::Text("Mode: %s", modeLabel);
     ImGui::Separator();
-    ImGui::SliderFloat("Zoom", &app.cellSize, 8.0f, 40.0f, "%.0f px");
+    ImGui::SliderFloat("Zoom", &app.cellSize, 8.0f, 80.0f, "%.0f px");
     if (ImGui::BeginItemTooltip()) { ImGui::Text("Canvas zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
     ImGui::Separator();
     ImGui::Checkbox("Onion Skin", &app.onionSkin);
@@ -98,15 +98,18 @@ void RenderCanvas(AppState &app)
         ImGui::ColorPicker3("##color", (float *)&app.currentColor,
             ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_PickerHueBar);
         ImGui::Separator();
+        bool firmware = (app.canvas.target == CanvasTarget::Firmware);
         ImGui::Text("Panel Colors (all frames):");
         for (int p = 0; p < app.canvas.PanelCount(); p++)
         {
             app.RefreshColorCounts();
             int count = app.cachedColorCounts[p];
-            if (count > 15)
+            if (firmware && count > 15)
                 ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "  Panel %d: %d/15 (!)", p, count);
-            else
+            else if (firmware)
                 ImGui::Text("  Panel %d: %d/15", p, count);
+            else
+                ImGui::Text("  Panel %d: %d colors", p, count);
         }
     }
     ImGui::End();
@@ -144,7 +147,7 @@ void RenderCanvas(AppState &app)
         {
             app.cellSize += io.MouseWheel * 2.0f;
             if (app.cellSize < 8.0f) app.cellSize = 8.0f;
-            if (app.cellSize > 40.0f) app.cellSize = 40.0f;
+            if (app.cellSize > 80.0f) app.cellSize = 80.0f;
         }
 
         // Draw pixels
@@ -363,7 +366,7 @@ void RenderCanvas(AppState &app)
                 app.canvas.ClearPanel(app.rightClickPanel);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel");
             }
-            if (ImGui::MenuItem("Quantize This Panel") && app.rightClickPanel >= 0)
+            if (ImGui::MenuItem("Quantize This Panel", nullptr, false, app.canvas.target == CanvasTarget::Firmware) && app.rightClickPanel >= 0)
             {
                 app.canvas.QuantizePanel(app.rightClickPanel);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize Panel");
@@ -374,7 +377,7 @@ void RenderCanvas(AppState &app)
                 app.canvas.ClearAll();
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All");
             }
-            if (ImGui::MenuItem("Quantize All Panels"))
+            if (ImGui::MenuItem("Quantize All Panels", nullptr, false, app.canvas.target == CanvasTarget::Firmware))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++) app.canvas.QuantizePanel(p);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");

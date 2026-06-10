@@ -15,7 +15,7 @@ void RenderPreview(AppState &app)
 
         ImGui::Checkbox("Hardware colors (66%)", &hwColors);
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview with the 66%% color scaling applied by hardware"); ImGui::EndTooltip(); }
-        ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 15.0f, "%.0f");
+        ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 40.0f, "%.0f");
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
 
         if (!previewPlaying)
@@ -71,12 +71,16 @@ void RenderPreview(AppState &app)
         int gridN = (app.canvas.extent == CanvasExtent::SinglePanel) ? 1 : 3;
         float totalSize = panelSize * gridN + panelGap * (gridN - 1);
 
-        // Center horizontally in available space
+        // Center horizontally; a single panel is also centered vertically so it sits in
+        // the middle of the preview pane rather than the top-left corner.
         ImVec2 avail = ImGui::GetContentRegionAvail();
         float offsetX = (avail.x > totalSize) ? (avail.x - totalSize) * 0.5f : 0;
         if (offsetX > 0)
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0f);
+        float offsetY = 10.0f;
+        if (app.canvas.extent == CanvasExtent::SinglePanel && avail.y > totalSize)
+            offsetY = (avail.y - totalSize) * 0.5f;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
 
         ImVec2 origin = ImGui::GetCursorScreenPos();
         draw->AddRectFilled(origin, ImVec2(origin.x + totalSize, origin.y + totalSize), IM_COL32(20, 20, 20, 255));
@@ -172,7 +176,7 @@ void RenderPreview(AppState &app)
         {
             app.previewZoom += io.MouseWheel * 1.0f;
             if (app.previewZoom < 3.0f) app.previewZoom = 3.0f;
-            if (app.previewZoom > 15.0f) app.previewZoom = 15.0f;
+            if (app.previewZoom > 40.0f) app.previewZoom = 40.0f;
         }
     }
     ImGui::End();
