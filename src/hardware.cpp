@@ -17,7 +17,7 @@ void UpdateHardware(AppState &app)
             int relTotal = (int)app.compositeReleased.frames.size();
             if (relTotal > 1)
             {
-                app.compositeFrameTime += 1.0 / 30.0;
+                app.compositeFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.compositeReleased.frames[app.compositeRelFrame].duration;
                 if (app.compositeFrameTime >= dur)
                 {
@@ -129,7 +129,7 @@ void UpdateHardware(AppState &app)
             // Advance pressed animation with proper timing
             if (app.compositePressedLoaded && !app.compositePressed.frames.empty())
             {
-                app.compositePrsFrameTime += 1.0 / 30.0;
+                app.compositePrsFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.compositePressed.frames[app.compositePrsFrame].duration;
                 if (app.compositePrsFrameTime >= dur)
                 {
@@ -154,7 +154,7 @@ void UpdateHardware(AppState &app)
             int totalFrames = (int)app.canvas.frames.size();
             if (!app.livePreviewSync && totalFrames > 1)
             {
-                app.livePreviewFrameTime += 1.0 / 30.0;
+                app.livePreviewFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.canvas.frames[app.livePreviewFrame].duration;
                 if (app.livePreviewFrameTime >= dur)
                 {

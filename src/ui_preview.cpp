@@ -45,7 +45,7 @@ void RenderPreview(AppState &app)
             double now = ImGui::GetTime();
             if (previewFrame >= totalFrames) previewFrame = 0;
             float dur = app.canvas.frames[previewFrame].duration;
-            if (now - previewLastTime >= dur)
+            if ((now - previewLastTime) * app.previewSpeed >= dur)
             {
                 previewLastTime = now;
                 previewFrame++;

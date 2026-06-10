@@ -19,7 +19,7 @@ void RenderTimeline(AppState &app)
         {
             double now = ImGui::GetTime();
             float frameDur = app.canvas.CurrentFrame().duration;
-            if (now - lastFrameTime >= frameDur)
+            if ((now - lastFrameTime) * app.previewSpeed >= frameDur)
             {
                 lastFrameTime = now;
                 app.canvas.currentFrame++;
@@ -281,7 +281,7 @@ void RenderTimeline(AppState &app)
         }
         ImGui::EndChild();
 
-        // Frame info at bottom left
+        // Frame info, total duration, and preview-speed control at the bottom.
         ImGui::Text("Frame %d / %d", app.canvas.currentFrame + 1, (int)app.canvas.frames.size());
         ImGui::SameLine();
         if (app.canvas.target == CanvasTarget::Host)
@@ -290,6 +290,32 @@ void RenderTimeline(AppState &app)
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "(%d max)", app.canvas.MaxFrames());
         else
             ImGui::TextDisabled("(%d max)", app.canvas.MaxFrames());
+
+        // Total animation time = sum of frame durations (the real exported loop length).
+        float totalSecs = 0.0f;
+        for (const auto &f : app.canvas.frames) totalSecs += f.duration;
+        ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+        if (app.canvas.loopFrame > 0)
+        {
+            float loopSecs = 0.0f;
+            for (int i = app.canvas.loopFrame; i < (int)app.canvas.frames.size(); i++)
+                loopSecs += app.canvas.frames[i].duration;
+            ImGui::Text("Total: %.2fs (loop %.2fs)", totalSecs, loopSecs);
+        }
+        else
+            ImGui::Text("Total: %.2fs", totalSecs);
+
+        // Preview/playback speed. Authoring aid only: never changes saved timing or export.
+        ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+        ImGui::TextDisabled("Speed:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        ImGui::SliderFloat("##speed", &app.previewSpeed, 0.05f, 4.0f, "%.2fx", ImGuiSliderFlags_Logarithmic);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Preview and playback speed only.\nDoes not change saved frame timing or the exported GIF.");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("1x")) app.previewSpeed = 1.0f;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset speed to 1.00x");
     }
     ImGui::End();
 }
