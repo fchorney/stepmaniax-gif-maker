@@ -54,6 +54,10 @@ struct Canvas
     std::vector<CanvasFrame> frames;
     int currentFrame = 0;
     int loopFrame = 0; // frame to loop back to (0 = loop from start)
+    // Last frame of the loop region (-1 = none). Frames after it form a release
+    // outro. This is a deadsync host-playback extension (per-panel judgement
+    // GIFs); SMX firmware and the official SDK ignore the marker.
+    int loopEndFrame = -1;
 
     // Canvas dimensions. Full pad is 23x24 / 14x15; a single panel is just the panel
     // area (7x7 / 4x4) plus the trailing flag row, so 7x8 / 4x5.

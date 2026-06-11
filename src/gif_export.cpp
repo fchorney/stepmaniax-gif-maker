@@ -217,6 +217,12 @@ bool WriteGifData(GifWriter &gw, const Canvas &canvas, const std::vector<Color> 
         if (f == canvas.loopFrame && canvas.loopFrame > 0)
             indices[(h - 1) * w + 0] = FindIndex(lookup, Color{255, 255, 255});
 
+        // Encode the loop-end marker at (1, h-1): the last frame of the loop
+        // region; later frames form a release outro. This is a deadsync
+        // host-playback extension; SMX firmware and the official SDK ignore it.
+        if (f == canvas.loopEndFrame && canvas.loopEndFrame >= 0)
+            indices[(h - 1) * w + 1] = FindIndex(lookup, Color{255, 255, 255});
+
         int minCodeSize = palBits;
         if (minCodeSize < 2) minCodeSize = 2;
         WriteLzwData(gw, indices, minCodeSize);
@@ -236,8 +242,8 @@ bool ExportGif(const Canvas &canvas, const std::string &path, std::string &outEr
 
     auto palette = BuildGlobalPalette(canvas);
 
-    // Ensure white for loop marker
-    if (canvas.loopFrame > 0)
+    // Ensure white for the loop / loop-end markers
+    if (canvas.loopFrame > 0 || canvas.loopEndFrame >= 0)
     {
         bool hasWhite = false;
         for (const auto &c : palette)
@@ -267,7 +273,7 @@ bool ExportGifToMemory(const Canvas &canvas, std::vector<char> &outData, std::st
 
     auto palette = BuildGlobalPalette(canvas);
 
-    if (canvas.loopFrame > 0)
+    if (canvas.loopFrame > 0 || canvas.loopEndFrame >= 0)
     {
         bool hasWhite = false;
         for (const auto &c : palette)

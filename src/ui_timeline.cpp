@@ -36,6 +36,30 @@ void RenderTimeline(AppState &app)
             }
         }
 
+        // Press-and-hold simulation of deadsync segment playback: intro once,
+        // then the loop region repeats while the Hold button is held down;
+        // releasing lets the outro play out, then parks on the last frame.
+        static bool holdSim = false;
+        static bool holdEngaged = false;
+        if (app.canvas.loopEndFrame < 0)
+            holdSim = false;
+        if (holdSim && totalFrames > 1)
+        {
+            double now = ImGui::GetTime();
+            float frameDur = app.canvas.CurrentFrame().duration;
+            if ((now - lastFrameTime) * app.previewSpeed >= frameDur)
+            {
+                lastFrameTime = now;
+                int loopEnd = std::min(app.canvas.loopEndFrame, totalFrames - 1);
+                if (app.canvas.currentFrame == loopEnd && holdEngaged)
+                    app.canvas.currentFrame = std::min(app.canvas.loopFrame, loopEnd);
+                else if (app.canvas.currentFrame >= totalFrames - 1)
+                    holdSim = false; // outro finished
+                else
+                    app.canvas.currentFrame++;
+            }
+        }
+
         // --- Playback ---
         ImGui::TextDisabled("Playback:");
         ImGui::SameLine();
@@ -44,6 +68,7 @@ void RenderTimeline(AppState &app)
             if (ImGui::Button("Play"))
             {
                 playing = true;
+                holdSim = false;
                 lastFrameTime = ImGui::GetTime();
                 if (app.canvas.currentFrame >= totalFrames - 1)
                     app.canvas.currentFrame = 0; // replay from the start if parked at the end
@@ -61,12 +86,39 @@ void RenderTimeline(AppState &app)
         {
             app.canvas.currentFrame = 0;
             playing = true;
+            holdSim = false;
             lastFrameTime = ImGui::GetTime();
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Play from frame 0"); ImGui::EndTooltip(); }
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &app.loopPlayback);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("When off, playback plays once and stops on the last frame");
+        if (app.canvas.loopEndFrame >= 0)
+        {
+            ImGui::SameLine();
+            ImGui::Button("Hold");
+            if (ImGui::IsItemActivated())
+            {
+                playing = false;
+                holdEngaged = true;
+                if (!holdSim)
+                {
+                    holdSim = true;
+                    app.canvas.currentFrame = 0;
+                    lastFrameTime = ImGui::GetTime();
+                }
+                else if (app.canvas.currentFrame > app.canvas.loopEndFrame)
+                {
+                    // Re-press during the outro: back into the loop region,
+                    // mirroring a freeze/roll re-engage in deadsync.
+                    app.canvas.currentFrame = std::min(app.canvas.loopFrame, app.canvas.loopEndFrame);
+                }
+            }
+            if (ImGui::IsItemDeactivated())
+                holdEngaged = false; // release: the outro plays out
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Press and hold to simulate deadsync playback:\nintro, then the loop region repeats while held;\nreleasing plays the outro. Press again during the\noutro to jump back into the loop.");
+        }
 
         // --- Move ---
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
@@ -194,6 +246,7 @@ void RenderTimeline(AppState &app)
                 playing = !playing;
                 if (playing)
                 {
+                    holdSim = false;
                     lastFrameTime = ImGui::GetTime();
                     if (app.canvas.currentFrame >= totalFrames - 1)
                         app.canvas.currentFrame = 0;
@@ -226,16 +279,29 @@ void RenderTimeline(AppState &app)
                     ImVec2(pos.x + thumbW + 2, pos.y + thumbH + 2),
                     IM_COL32(255, 200, 0, 255), 0, 0, 2.0f);
 
-            // Loop point marker
+            // Loop point marker (cyan, pointing up); shifted left when the
+            // loop-end marker shares the frame.
             if (f == app.canvas.loopFrame)
             {
-                float cx = pos.x + thumbW * 0.5f;
+                float cx = pos.x + thumbW * 0.5f - (f == app.canvas.loopEndFrame ? 7.0f : 0.0f);
                 float ty = pos.y + thumbH + 2;
                 draw->AddTriangleFilled(
                     ImVec2(cx - 5, ty + 8),
                     ImVec2(cx + 5, ty + 8),
                     ImVec2(cx, ty),
                     IM_COL32(0, 200, 255, 220));
+            }
+
+            // Loop-end marker (orange, pointing down): later frames are the outro.
+            if (f == app.canvas.loopEndFrame)
+            {
+                float cx = pos.x + thumbW * 0.5f + (f == app.canvas.loopFrame ? 7.0f : 0.0f);
+                float ty = pos.y + thumbH + 2;
+                draw->AddTriangleFilled(
+                    ImVec2(cx - 5, ty),
+                    ImVec2(cx + 5, ty),
+                    ImVec2(cx, ty + 8),
+                    IM_COL32(255, 160, 0, 220));
             }
 
             // Draw thumbnail
@@ -290,8 +356,29 @@ void RenderTimeline(AppState &app)
                     if (ImGui::MenuItem("Set Loop Point"))
                     {
                         app.canvas.loopFrame = f;
+                        // A loop end before the new loop start is meaningless; drop it.
+                        if (app.canvas.loopEndFrame >= 0 && app.canvas.loopEndFrame < f)
+                            app.canvas.loopEndFrame = -1;
                         app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Set Loop Point");
                     }
+                }
+                if (app.canvas.loopEndFrame == f)
+                {
+                    if (ImGui::MenuItem("Clear Loop End"))
+                    {
+                        app.canvas.loopEndFrame = -1;
+                        app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Loop End");
+                    }
+                }
+                else if (app.canvas.target == CanvasTarget::Host && f >= app.canvas.loopFrame)
+                {
+                    if (ImGui::MenuItem("Set Loop End"))
+                    {
+                        app.canvas.loopEndFrame = f;
+                        app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Set Loop End");
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Last frame of the loop region; later frames become a\nrelease outro. Only used by deadsync host playback\n(per-panel judgement GIFs); SMX firmware and the\nofficial SDK ignore this marker.");
                 }
                 ImGui::EndPopup();
             }
@@ -315,7 +402,17 @@ void RenderTimeline(AppState &app)
         float totalSecs = 0.0f;
         for (const auto &f : app.canvas.frames) totalSecs += f.duration;
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
-        if (app.canvas.loopFrame > 0)
+        if (app.canvas.loopEndFrame >= 0)
+        {
+            int loopEnd = std::min(app.canvas.loopEndFrame, (int)app.canvas.frames.size() - 1);
+            float loopSecs = 0.0f, outroSecs = 0.0f;
+            for (int i = app.canvas.loopFrame; i <= loopEnd; i++)
+                loopSecs += app.canvas.frames[i].duration;
+            for (int i = loopEnd + 1; i < (int)app.canvas.frames.size(); i++)
+                outroSecs += app.canvas.frames[i].duration;
+            ImGui::Text("Total: %.2fs (loop %.2fs, outro %.2fs)", totalSecs, loopSecs, outroSecs);
+        }
+        else if (app.canvas.loopFrame > 0)
         {
             float loopSecs = 0.0f;
             for (int i = app.canvas.loopFrame; i < (int)app.canvas.frames.size(); i++)

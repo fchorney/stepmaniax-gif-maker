@@ -197,6 +197,24 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
         }
     }
 
+    // Detect the loop-end marker: pixel (1, h-1) with R >= 128 marks the last
+    // frame of the loop region; later frames form a release outro (a deadsync
+    // host-playback extension; firmware ignores it).
+    canvas.loopEndFrame = -1;
+    for (int f = 0; f < (int)canvas.frames.size(); f++)
+    {
+        Color c = canvas.frames[f].GetPixel(1, h - 1, w);
+        if (c.r >= 128)
+        {
+            canvas.loopEndFrame = f;
+            canvas.frames[f].SetPixel(1, h - 1, w, Color{0, 0, 0});
+            break;
+        }
+    }
+    // A loop end before the loop start is author error; deadsync ignores it too.
+    if (canvas.loopEndFrame >= 0 && canvas.loopEndFrame < canvas.loopFrame)
+        canvas.loopEndFrame = -1;
+
     // Clear non-LED pixels (gutters, flag row, non-sampled positions)
     bool modified = false;
     for (auto &frame : canvas.frames)

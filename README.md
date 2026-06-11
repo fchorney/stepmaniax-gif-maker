@@ -33,7 +33,7 @@ We still need an icon for this app! I'm terrible at drawing/graphics related stu
 
 - **Pixel grid editor** for 14×15 (legacy) and 23×24 (modern) GIF formats
 - **Drawing tools** - Draw, Erase, Fill, Replace, Pick Color
-- **Animation timeline** - add/duplicate/delete/reorder frames, per-frame duration, loop point
+- **Animation timeline** - add/duplicate/delete/reorder frames, per-frame duration, loop point, optional loop end with a press-and-hold playback simulation
 - **Live hardware preview** - stream animations to connected pads in real-time (sync or play mode)
 - **Firmware upload** - write released and pressed animations to pad EEPROM for offline playback
 - **Composite preview** - load released + pressed GIFs, preview overlay behavior with live pad input
@@ -145,6 +145,7 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 - Max 32 frames, max 15 colors per panel (for firmware upload)
 - Black pixels are treated as transparent/off
 - Loop point encoded as a marker pixel in the flag row
+- Optional loop-end marker (second flag-row pixel, at x=1): frames after it form a release outro. Host-target canvases only; this is a [deadsync](https://github.com/fchorney/deadsync) extension for per-panel judgement GIFs (intro plays once, the loop region repeats while the panel is pressed, the outro plays on release). SMX firmware and the official SDK ignore it
 
 ### Keyboard Shortcuts
 

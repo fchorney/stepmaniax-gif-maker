@@ -26,6 +26,7 @@ void Canvas::Init(CanvasMode m, CanvasExtent e, CanvasTarget t)
     frames.clear();
     currentFrame = 0;
     loopFrame = 0;
+    loopEndFrame = -1;
     AddFrame();
 }
 
@@ -64,6 +65,8 @@ void Canvas::DeleteFrame(int idx)
         currentFrame = (int)frames.size() - 1;
     if (loopFrame >= (int)frames.size())
         loopFrame = (int)frames.size() - 1;
+    if (loopEndFrame >= (int)frames.size())
+        loopEndFrame = (int)frames.size() - 1;
 }
 
 CanvasFrame &Canvas::CurrentFrame() { return frames[currentFrame]; }
