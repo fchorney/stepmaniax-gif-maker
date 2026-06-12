@@ -109,8 +109,8 @@ struct Canvas
     // Clear a specific panel to black across every frame.
     void ClearPanelAllFrames(int panel);
 
-    // Shift hue (degrees) and scale saturation/value of every LED in a frame.
-    void AdjustHsv(int frame_index, float hue_shift_deg, float sat_mul, float val_mul);
+    // Apply an HSV adjustment to every LED in a frame.
+    void AdjustHsv(int frame_index, const struct HsvAdjust &adj);
 
     // Clear all LED positions in all panels to black.
     void ClearAll();
@@ -119,7 +119,26 @@ struct Canvas
     void QuantizePanel(int panel, int maxColors = 15);
 };
 
-// Shift a color's hue by `hue_shift_deg` and scale its saturation/value by the
-// given multipliers (clamped to valid range). Black and greys behave sensibly
-// (a hue shift leaves a grey unchanged; value scaling dims/brightens).
-Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul);
+// An HSV recolor: rotate hue, then apply gain (multiply) and bias (add) to
+// saturation and value. The bias is what lets any pixel reach the full 0..1
+// range regardless of its original level, which a pure multiplier cannot do
+// (a dim or black pixel can't be multiplied up to full).
+struct HsvAdjust
+{
+    float hue_deg = 0.0f;
+    float sat_mul = 1.0f;
+    float sat_add = 0.0f;
+    float val_mul = 1.0f;
+    float val_add = 0.0f;
+
+    bool IsIdentity() const
+    {
+        return hue_deg == 0.0f && sat_mul == 1.0f && sat_add == 0.0f && val_mul == 1.0f &&
+               val_add == 0.0f;
+    }
+};
+
+// Apply an HSV adjustment to a single color: hue rotates, saturation and value
+// become clamp(x * mul + add, 0, 1). Black and greys behave sensibly (a hue
+// shift leaves a grey unchanged; a value bias can still lift black off zero).
+Color AdjustColorHsv(Color in, const HsvAdjust &adj);

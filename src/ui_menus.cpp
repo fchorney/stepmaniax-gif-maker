@@ -572,7 +572,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     static bool hsvInit = false;
     static std::vector<CanvasFrame> hsvSnapshot;
     static int hsvFrame = 0;
-    static float hsvHue = 0.0f, hsvSat = 1.0f, hsvVal = 1.0f;
+    static HsvAdjust hsvAdj;
     static bool hsvAllFrames = false;
     if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -580,34 +580,38 @@ void RenderMenus(AppState &app, SDL_Window *window)
         {
             hsvSnapshot = app.canvas.frames;
             hsvFrame = app.canvas.currentFrame;
-            hsvHue = 0.0f;
-            hsvSat = 1.0f;
-            hsvVal = 1.0f;
+            hsvAdj = HsvAdjust{};
             hsvInit = true;
         }
 
+        // Saturation and value each have a gain (x) and a bias (+/-). The bias
+        // is what lets dim or black pixels reach the full range; gain alone is
+        // relative to each pixel's original level.
         ImGui::SetNextItemWidth(220);
-        ImGui::SliderFloat("Hue shift", &hsvHue, -180.0f, 180.0f, "%.0f deg");
+        ImGui::SliderFloat("Hue shift", &hsvAdj.hue_deg, -180.0f, 180.0f, "%.0f deg");
+        ImGui::Spacing();
         ImGui::SetNextItemWidth(220);
-        ImGui::SliderFloat("Saturation", &hsvSat, 0.0f, 2.0f, "%.2fx");
+        ImGui::SliderFloat("Saturation x", &hsvAdj.sat_mul, 0.0f, 4.0f, "%.2fx");
         ImGui::SetNextItemWidth(220);
-        ImGui::SliderFloat("Value", &hsvVal, 0.0f, 2.0f, "%.2fx");
+        ImGui::SliderFloat("Saturation +/-", &hsvAdj.sat_add, -1.0f, 1.0f, "%+.2f");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Value x", &hsvAdj.val_mul, 0.0f, 4.0f, "%.2fx");
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Value +/-", &hsvAdj.val_add, -1.0f, 1.0f, "%+.2f");
+        ImGui::Spacing();
         ImGui::Checkbox("All frames", &hsvAllFrames);
         ImGui::SameLine();
         if (ImGui::SmallButton("Reset"))
-        {
-            hsvHue = 0.0f;
-            hsvSat = 1.0f;
-            hsvVal = 1.0f;
-        }
+            hsvAdj = HsvAdjust{};
 
         // Recompute the preview from the snapshot every frame.
         app.canvas.frames = hsvSnapshot;
         if (hsvAllFrames)
             for (int i = 0; i < (int)app.canvas.frames.size(); i++)
-                app.canvas.AdjustHsv(i, hsvHue, hsvSat, hsvVal);
+                app.canvas.AdjustHsv(i, hsvAdj);
         else
-            app.canvas.AdjustHsv(hsvFrame, hsvHue, hsvSat, hsvVal);
+            app.canvas.AdjustHsv(hsvFrame, hsvAdj);
         app.colorCountsDirty = true;
 
         ImGui::Separator();

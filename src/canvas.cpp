@@ -200,7 +200,7 @@ void Canvas::ClearAll()
         ClearPanel(p);
 }
 
-Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul)
+Color AdjustColorHsv(Color in, const HsvAdjust &adj)
 {
     float r = in.r / 255.0f, g = in.g / 255.0f, b = in.b / 255.0f;
     float mx = std::max({r, g, b});
@@ -219,11 +219,12 @@ Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul
     float s = (mx <= 1e-6f) ? 0.0f : d / mx;
     float v = mx;
 
-    // Apply the adjustment.
-    h = std::fmod(h + hue_shift_deg, 360.0f);
+    // Apply the adjustment: hue rotates; saturation and value are gain (mul)
+    // then bias (add), so a bias can push any pixel across the full range.
+    h = std::fmod(h + adj.hue_deg, 360.0f);
     if (h < 0.0f) h += 360.0f;
-    s = std::clamp(s * sat_mul, 0.0f, 1.0f);
-    v = std::clamp(v * val_mul, 0.0f, 1.0f);
+    s = std::clamp(s * adj.sat_mul + adj.sat_add, 0.0f, 1.0f);
+    v = std::clamp(v * adj.val_mul + adj.val_add, 0.0f, 1.0f);
 
     // HSV -> RGB.
     float c = v * s;
@@ -243,7 +244,7 @@ Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul
     return Color{to8(rr + m), to8(gg + m), to8(bb + m)};
 }
 
-void Canvas::AdjustHsv(int frame_index, float hue_shift_deg, float sat_mul, float val_mul)
+void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj)
 {
     if (frame_index < 0 || frame_index >= (int)frames.size()) return;
     auto &frame = frames[frame_index];
@@ -251,7 +252,7 @@ void Canvas::AdjustHsv(int frame_index, float hue_shift_deg, float sat_mul, floa
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
             if (IsLedPosition(x, y))
-                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), hue_shift_deg, sat_mul, val_mul));
+                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
 }
 
 int Canvas::ColorCountForPanelAllFrames(int panel) const
