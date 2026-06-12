@@ -38,7 +38,8 @@ void RenderTimeline(AppState &app)
 
         // Press-and-hold simulation of deadsync segment playback: intro once,
         // then the loop region repeats while the Hold button is held down;
-        // releasing lets the outro play out, then parks on the last frame.
+        // releasing snaps straight to the outro (no finishing the loop pass),
+        // which plays out and parks on the last frame.
         static bool holdSim = false;
         static bool holdEngaged = false;
         if (app.canvas.loopEndFrame < 0)
@@ -115,9 +116,20 @@ void RenderTimeline(AppState &app)
                 }
             }
             if (ImGui::IsItemDeactivated())
-                holdEngaged = false; // release: the outro plays out
+            {
+                // Release: snap from the loop region straight to the outro,
+                // mirroring deadsync (which does not finish the loop pass).
+                holdEngaged = false;
+                int loopEnd = std::min(app.canvas.loopEndFrame, totalFrames - 1);
+                if (app.canvas.currentFrame >= app.canvas.loopFrame
+                    && app.canvas.currentFrame <= loopEnd && loopEnd + 1 < totalFrames)
+                {
+                    app.canvas.currentFrame = loopEnd + 1;
+                    lastFrameTime = ImGui::GetTime();
+                }
+            }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Press and hold to simulate deadsync playback:\nintro, then the loop region repeats while held;\nreleasing plays the outro. Press again during the\noutro to jump back into the loop.");
+                ImGui::SetTooltip("Press and hold to simulate deadsync playback:\nintro, then the loop region repeats while held;\nreleasing snaps to the outro. Press again during\nthe outro to jump back into the loop.");
         }
 
         // --- Move ---
