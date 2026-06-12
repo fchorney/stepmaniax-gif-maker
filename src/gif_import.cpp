@@ -229,6 +229,8 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
 
     // Target: firmware upload is only possible for a full-pad Modern animation that fits the
     // firmware caps (<=32 frames and <=15 colors per panel). Everything else is host-only.
+    // The guess can be wrong for a host-authored gif that happens to fit the caps;
+    // Edit > Target switches it after opening.
     canvas.target = CanvasTarget::Firmware;
     if (extent != CanvasExtent::FullPad || mode != CanvasMode::Modern
         || (int)canvas.frames.size() > 32)
@@ -244,6 +246,10 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
                 break;
             }
     }
+    // A loop-end marker is a host-playback extension, so its presence means the
+    // gif was authored for the host regardless of the firmware caps.
+    if (canvas.loopEndFrame >= 0)
+        canvas.target = CanvasTarget::Host;
 
     if (pixelsModified) *pixelsModified = modified;
     return true;

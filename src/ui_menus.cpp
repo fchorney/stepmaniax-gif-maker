@@ -245,6 +245,52 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
+            // Convert the open canvas between targets. Opening a gif guesses its
+            // target from the firmware caps, which mislabels a host-authored gif
+            // that happens to fit them; this lets the author correct it.
+            if (ImGui::BeginMenu("Target"))
+            {
+                bool isFirmware = app.canvas.target == CanvasTarget::Firmware;
+                bool shapeOk = app.canvas.mode == CanvasMode::Modern
+                               && app.canvas.extent == CanvasExtent::FullPad;
+                bool framesOk = (int)app.canvas.frames.size() <= 32;
+                bool colorsOk = true;
+                if (shapeOk && framesOk)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        {
+                            colorsOk = false;
+                            break;
+                        }
+                bool firmwareOk = shapeOk && framesOk && colorsOk;
+                if (ImGui::MenuItem("Firmware (EEPROM upload; 32-frame, 15-color caps)", nullptr,
+                                    isFirmware, firmwareOk)
+                    && !isFirmware)
+                {
+                    app.canvas.target = CanvasTarget::Firmware;
+                    app.undo.SaveState(app.canvas, "Target: Firmware");
+                }
+                if (!firmwareOk && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    if (!shapeOk)
+                        ImGui::SetTooltip("Firmware upload needs a Modern full-pad canvas.");
+                    else if (!framesOk)
+                        ImGui::SetTooltip("Firmware upload caps animations at 32 frames;\ndelete frames first.");
+                    else
+                        ImGui::SetTooltip("A panel uses more than 15 colors;\nquantize panels first (Edit > Quantize).");
+                }
+                if (ImGui::MenuItem("Host (deadsync playback; uncapped, no upload)", nullptr,
+                                    !isFirmware)
+                    && isFirmware)
+                {
+                    app.canvas.target = CanvasTarget::Host;
+                    app.undo.SaveState(app.canvas, "Target: Host");
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Host playback unlocks the loop-end / outro marker\nand removes the frame and color caps.");
+                ImGui::EndMenu();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Settings...")) app.showSettings = true;
             ImGui::EndMenu();
         }

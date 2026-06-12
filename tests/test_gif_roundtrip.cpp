@@ -145,6 +145,31 @@ TEST_CASE("full-pad Modern within caps imports as Firmware target")
     std::filesystem::remove(path);
 }
 
+TEST_CASE("full-pad Modern with a loop-end marker imports as Host")
+{
+    // The loop-end marker is a host-playback extension, so it overrides the
+    // firmware-caps guess even when the gif would fit the caps.
+    Canvas src;
+    src.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    src.AddFrame();
+    src.AddFrame();
+    src.frames[0].SetPixel(0, 0, src.Width(), Color{10, 20, 30});
+    src.loopEndFrame = 1;
+
+    std::string path = TempPath("gifmaker_rt_full_loopend.gif");
+    std::string err;
+    REQUIRE(ExportGif(src, path, err));
+
+    Canvas dst;
+    std::string ierr;
+    REQUIRE(ImportGif(path, dst, ierr, nullptr));
+    CHECK(dst.extent == CanvasExtent::FullPad);
+    CHECK(dst.loopEndFrame == 1);
+    CHECK(dst.target == CanvasTarget::Host);
+
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("full-pad Legacy imports as Host (legacy cannot upload)")
 {
     Canvas src;
