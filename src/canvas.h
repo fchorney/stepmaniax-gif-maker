@@ -103,8 +103,11 @@ struct Canvas
     // Count unique non-black colors used in a panel across ALL frames.
     int ColorCountForPanelAllFrames(int panel) const;
 
-    // Clear all LED positions in a specific panel to black.
+    // Clear all LED positions in a specific panel to black, on the current frame.
     void ClearPanel(int panel);
+
+    // Clear a specific panel to black across every frame.
+    void ClearPanelAllFrames(int panel);
 
     // Clear all LED positions in all panels to black.
     void ClearAll();

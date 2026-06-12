@@ -99,3 +99,32 @@ TEST_CASE("MaxFrames depends on target")
     for (int i = 0; i < 50; i++) host.AddFrame();
     CHECK((int)host.frames.size() == 51);
 }
+
+TEST_CASE("ClearPanelAllFrames clears one panel across every frame")
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    c.AddFrame(); // 2 frames
+    int w = c.Width();
+    // An LED in panel 0 and one in panel 8, on both frames (both even/even,
+    // so genuine LED positions: panel 0 at (0,0), panel 8 at (16,16)).
+    const Color red{255, 0, 0};
+    REQUIRE(c.PanelAt(0, 0) == 0);
+    REQUIRE(c.IsLedPosition(0, 0));
+    REQUIRE(c.PanelAt(16, 16) == 8);
+    REQUIRE(c.IsLedPosition(16, 16));
+    for (auto &f : c.frames)
+    {
+        f.SetPixel(0, 0, w, red);
+        f.SetPixel(16, 16, w, red);
+    }
+
+    c.ClearPanelAllFrames(0);
+
+    // Panel 0 is black on every frame; panel 8 is untouched on every frame.
+    for (const auto &f : c.frames)
+    {
+        CHECK(f.GetPixel(0, 0, w).IsBlack());
+        CHECK(f.GetPixel(16, 16, w) == red);
+    }
+}

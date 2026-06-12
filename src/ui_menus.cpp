@@ -228,6 +228,16 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Clear Panel (All Frames)"))
+            {
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                {
+                    char label[16];
+                    snprintf(label, sizeof(label), "Panel %d", p);
+                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanelAllFrames(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel (All Frames)"); }
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
             if (ImGui::BeginMenu("Quantize Panel", app.canvas.target == CanvasTarget::Firmware))
             {

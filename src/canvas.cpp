@@ -182,6 +182,17 @@ void Canvas::ClearPanel(int panel)
                 frame.SetPixel(x, y, w, Color{0, 0, 0});
 }
 
+void Canvas::ClearPanelAllFrames(int panel)
+{
+    if (panel < 0 || panel > 8) return;
+    int w = Width(), h = Height();
+    for (auto &frame : frames)
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (PanelAt(x, y) == panel && IsLedPosition(x, y))
+                    frame.SetPixel(x, y, w, Color{0, 0, 0});
+}
+
 void Canvas::ClearAll()
 {
     for (int p = 0; p < PanelCount(); p++)

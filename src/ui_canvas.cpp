@@ -366,6 +366,11 @@ void RenderCanvas(AppState &app)
                 app.canvas.ClearPanel(app.rightClickPanel);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel");
             }
+            if (ImGui::MenuItem("Clear This Panel (All Frames)") && app.rightClickPanel >= 0)
+            {
+                app.canvas.ClearPanelAllFrames(app.rightClickPanel);
+                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel (All Frames)");
+            }
             if (ImGui::MenuItem("Quantize This Panel", nullptr, false, app.canvas.target == CanvasTarget::Firmware) && app.rightClickPanel >= 0)
             {
                 app.canvas.QuantizePanel(app.rightClickPanel);
