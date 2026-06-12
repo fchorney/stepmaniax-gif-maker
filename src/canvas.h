@@ -109,9 +109,17 @@ struct Canvas
     // Clear a specific panel to black across every frame.
     void ClearPanelAllFrames(int panel);
 
+    // Shift hue (degrees) and scale saturation/value of every LED in a frame.
+    void AdjustHsv(int frame_index, float hue_shift_deg, float sat_mul, float val_mul);
+
     // Clear all LED positions in all panels to black.
     void ClearAll();
 
     // Quantize a panel's colors to at most maxColors across all frames.
     void QuantizePanel(int panel, int maxColors = 15);
 };
+
+// Shift a color's hue by `hue_shift_deg` and scale its saturation/value by the
+// given multipliers (clamped to valid range). Black and greys behave sensibly
+// (a hue shift leaves a grey unchanged; value scaling dims/brightens).
+Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul);

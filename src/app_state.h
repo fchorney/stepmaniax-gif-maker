@@ -80,6 +80,7 @@ struct AppState
     bool showSettings = false;
     bool showNewDialog = false;
     bool showExportWarning = false;
+    bool showHsvDialog = false;
 
     // Onion skin
     bool onionSkin = false;

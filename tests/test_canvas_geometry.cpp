@@ -100,6 +100,44 @@ TEST_CASE("MaxFrames depends on target")
     CHECK((int)host.frames.size() == 51);
 }
 
+TEST_CASE("AdjustColorHsv shifts hue and scales saturation/value")
+{
+    // Identity: no shift, unit scales, returns (near) the same color.
+    Color red{255, 0, 0};
+    Color id = AdjustColorHsv(red, 0.0f, 1.0f, 1.0f);
+    CHECK(id.r == 255);
+    CHECK(id.g == 0);
+    CHECK(id.b == 0);
+
+    // +120 degrees of hue turns red into green.
+    Color green = AdjustColorHsv(red, 120.0f, 1.0f, 1.0f);
+    CHECK(green.r == 0);
+    CHECK(green.g == 255);
+    CHECK(green.b == 0);
+
+    // Halving value dims red to half brightness.
+    Color dim = AdjustColorHsv(red, 0.0f, 1.0f, 0.5f);
+    CHECK(dim.r == 128);
+    CHECK(dim.g == 0);
+    CHECK(dim.b == 0);
+
+    // Zero saturation desaturates to grey at the same value.
+    Color grey = AdjustColorHsv(red, 0.0f, 0.0f, 1.0f);
+    CHECK(grey.r == 255);
+    CHECK(grey.g == 255);
+    CHECK(grey.b == 255);
+
+    // A hue shift leaves a grey unchanged (saturation is zero).
+    Color stays = AdjustColorHsv(Color{100, 100, 100}, 90.0f, 1.0f, 1.0f);
+    CHECK(stays.r == 100);
+    CHECK(stays.g == 100);
+    CHECK(stays.b == 100);
+
+    // Black stays black under any adjustment.
+    Color black = AdjustColorHsv(Color{0, 0, 0}, 45.0f, 1.5f, 2.0f);
+    CHECK(black.IsBlack());
+}
+
 TEST_CASE("ClearPanelAllFrames clears one panel across every frame")
 {
     Canvas c;

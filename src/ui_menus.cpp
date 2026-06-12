@@ -255,6 +255,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Adjust HSV...")) app.showHsvDialog = true;
+            ImGui::Separator();
             // Convert the open canvas between targets. Opening a gif guesses its
             // target from the firmware caps, which mislabels a host-authored gif
             // that happens to fit them; this lets the author correct it.
@@ -553,6 +555,76 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("Close"))
         {
             rebindTarget = nullptr;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // --- Adjust HSV Popup ---
+    // Live-previews on the canvas: each frame the popup recomputes the affected
+    // frames from a snapshot taken on open, so the sliders are non-destructive
+    // until Apply (and fully reverted on Cancel).
+    if (app.showHsvDialog)
+    {
+        ImGui::OpenPopup("Adjust HSV");
+        app.showHsvDialog = false;
+    }
+    static bool hsvInit = false;
+    static std::vector<CanvasFrame> hsvSnapshot;
+    static int hsvFrame = 0;
+    static float hsvHue = 0.0f, hsvSat = 1.0f, hsvVal = 1.0f;
+    static bool hsvAllFrames = false;
+    if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        if (!hsvInit)
+        {
+            hsvSnapshot = app.canvas.frames;
+            hsvFrame = app.canvas.currentFrame;
+            hsvHue = 0.0f;
+            hsvSat = 1.0f;
+            hsvVal = 1.0f;
+            hsvInit = true;
+        }
+
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Hue shift", &hsvHue, -180.0f, 180.0f, "%.0f deg");
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Saturation", &hsvSat, 0.0f, 2.0f, "%.2fx");
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Value", &hsvVal, 0.0f, 2.0f, "%.2fx");
+        ImGui::Checkbox("All frames", &hsvAllFrames);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset"))
+        {
+            hsvHue = 0.0f;
+            hsvSat = 1.0f;
+            hsvVal = 1.0f;
+        }
+
+        // Recompute the preview from the snapshot every frame.
+        app.canvas.frames = hsvSnapshot;
+        if (hsvAllFrames)
+            for (int i = 0; i < (int)app.canvas.frames.size(); i++)
+                app.canvas.AdjustHsv(i, hsvHue, hsvSat, hsvVal);
+        else
+            app.canvas.AdjustHsv(hsvFrame, hsvHue, hsvSat, hsvVal);
+        app.colorCountsDirty = true;
+
+        ImGui::Separator();
+        if (ImGui::Button("Apply"))
+        {
+            app.dirty = true;
+            app.colorCountsDirty = true;
+            app.undo.SaveState(app.canvas, hsvAllFrames ? "Adjust HSV (all frames)" : "Adjust HSV");
+            hsvInit = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel"))
+        {
+            app.canvas.frames = hsvSnapshot;
+            app.colorCountsDirty = true;
+            hsvInit = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

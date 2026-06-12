@@ -2,6 +2,7 @@
 #include "canvas.h"
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <set>
 
 Color CanvasFrame::GetPixel(int x, int y, int width) const
@@ -197,6 +198,60 @@ void Canvas::ClearAll()
 {
     for (int p = 0; p < PanelCount(); p++)
         ClearPanel(p);
+}
+
+Color AdjustColorHsv(Color in, float hue_shift_deg, float sat_mul, float val_mul)
+{
+    float r = in.r / 255.0f, g = in.g / 255.0f, b = in.b / 255.0f;
+    float mx = std::max({r, g, b});
+    float mn = std::min({r, g, b});
+    float d = mx - mn;
+
+    // RGB -> HSV.
+    float h = 0.0f;
+    if (d > 1e-6f)
+    {
+        if (mx == r) h = 60.0f * std::fmod((g - b) / d, 6.0f);
+        else if (mx == g) h = 60.0f * ((b - r) / d + 2.0f);
+        else h = 60.0f * ((r - g) / d + 4.0f);
+        if (h < 0.0f) h += 360.0f;
+    }
+    float s = (mx <= 1e-6f) ? 0.0f : d / mx;
+    float v = mx;
+
+    // Apply the adjustment.
+    h = std::fmod(h + hue_shift_deg, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+    s = std::clamp(s * sat_mul, 0.0f, 1.0f);
+    v = std::clamp(v * val_mul, 0.0f, 1.0f);
+
+    // HSV -> RGB.
+    float c = v * s;
+    float x = c * (1.0f - std::fabs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+    float m = v - c;
+    float rr, gg, bb;
+    if (h < 60.0f) { rr = c; gg = x; bb = 0.0f; }
+    else if (h < 120.0f) { rr = x; gg = c; bb = 0.0f; }
+    else if (h < 180.0f) { rr = 0.0f; gg = c; bb = x; }
+    else if (h < 240.0f) { rr = 0.0f; gg = x; bb = c; }
+    else if (h < 300.0f) { rr = x; gg = 0.0f; bb = c; }
+    else { rr = c; gg = 0.0f; bb = x; }
+
+    auto to8 = [](float f) {
+        return (uint8_t)std::lround(std::clamp((f) * 255.0f, 0.0f, 255.0f));
+    };
+    return Color{to8(rr + m), to8(gg + m), to8(bb + m)};
+}
+
+void Canvas::AdjustHsv(int frame_index, float hue_shift_deg, float sat_mul, float val_mul)
+{
+    if (frame_index < 0 || frame_index >= (int)frames.size()) return;
+    auto &frame = frames[frame_index];
+    int w = Width(), h = Height();
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            if (IsLedPosition(x, y))
+                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), hue_shift_deg, sat_mul, val_mul));
 }
 
 int Canvas::ColorCountForPanelAllFrames(int panel) const
