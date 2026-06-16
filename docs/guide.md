@@ -8,6 +8,7 @@ A complete guide to creating, editing, previewing, and uploading animated LED GI
 - [Interface](#interface)
 - [Canvas Editor](#canvas-editor)
 - [Drawing Tools](#drawing-tools)
+- [Edit Menu Tools](#edit-menu-tools)
 - [Color Palette](#color-palette)
   - [Color Picker](#color-picker)
   - [Panel Colors](#panel-colors)
@@ -66,6 +67,20 @@ The legacy canvas has no blank spaces as it is simply a 4x4 grid.
 
 The mode is chosen when creating a new file (File → New) and cannot be changed after creation.
 
+### Canvas Extent
+
+- **Full Pad** - shows all 9 panels in the 3×3 grid. Required for firmware upload.
+- **Single Panel** - shows only one panel. Produces a GIF containing just that panel's pixel region. Useful for authoring per-panel judgement GIFs for deadsync. Hardware preview streams the single panel to the physical pad.
+
+### Canvas Target
+
+The target controls which constraints and features are active:
+
+- **Firmware** - enforces the 32-frame and 15-color-per-panel caps. Quantize and Upload to Firmware are available. The loop-end/outro marker is hidden.
+- **Host** - no frame or color caps. Enables the loop-end marker and hold/release playback simulation. Firmware upload is disabled.
+
+The target is chosen at creation time (File → New) and can be changed later via **Edit → Canvas Target**. When opening an existing GIF, the editor auto-detects the target: if the file exceeds firmware caps it opens as Host, otherwise as Firmware.
+
 ### Navigation
 
 - Ctrl(Cmd)+Mouse Wheel to zoom in/out on the canvas
@@ -91,6 +106,41 @@ Select tools from the Tools panel or use keyboard shortcuts (1–5 by default).
 |---------------|-------------|
 | **Zoom** | Adjust canvas zoom (8px to 40px) |
 | **Onion Skin** | Display previous or next frame overlay |
+
+---
+
+## Edit Menu Tools
+
+### Clear Panel / Clear Panel (All Frames)
+
+Found under **Edit → Clear Panel**. Erases all LED pixels in the selected panel.
+
+- **Clear Panel** - clears the panel on the current frame only.
+- **Clear Panel (All Frames)** - clears the panel across every frame in the animation. Useful for resetting a panel without affecting the others.
+
+Both operations are undoable.
+
+### Adjust HSV
+
+Found under **Edit → Adjust HSV**. Opens a dialog to shift hue and adjust the saturation and value of all non-black pixels on the canvas.
+
+| Control | Effect |
+|---------|--------|
+| **Hue Shift** | Rotate hue (0-360 degrees) |
+| **Saturation Gain** | Multiply saturation (0-4x) |
+| **Saturation Bias** | Add/subtract to saturation after gain (+/-1.0) |
+| **Value Gain** | Multiply brightness (0-4x) |
+| **Value Bias** | Add/subtract to brightness after gain (+/-1.0) |
+
+The gain+bias model allows dim or near-black pixels to reach full range: use a high gain to stretch low values, then trim with bias as needed.
+
+- **All Frames** checkbox - when checked, applies to every frame; when unchecked, applies to the current frame only.
+- Changes are previewed live on the canvas as you drag the sliders.
+- Click **Apply** to commit (creates an undo entry) or **Cancel** to discard.
+
+### Canvas Target
+
+Found under **Edit → Canvas Target**. Switches an open canvas between Firmware and Host target modes. See [Canvas Target](#canvas-target) above.
 
 ---
 
@@ -143,6 +193,37 @@ Select tools from the Tools panel or use keyboard shortcuts (1–5 by default).
 - After the last frame plays, the animation loops back to this frame
 - Default loop point is frame 0
 
+### Loop-End Marker (Host Target Only)
+
+When the canvas target is **Host**, right-clicking a frame also exposes a **Set as Loop End** option. The loop-end marker splits the animation into three regions:
+
+1. **Intro** - frames before the loop point; plays once when the animation starts
+2. **Loop region** - frames from the loop point through the loop-end frame; repeats continuously while the panel is held
+3. **Outro** - frames after the loop-end frame; plays once on release
+
+The loop-end frame is shown with an orange downward-pointing marker in the timeline. Right-click the same frame again to clear it.
+
+This is a [deadsync](https://github.com/pnn64/deadsync) extension for per-panel judgement GIFs. SMX firmware and the official SDK ignore the loop-end marker.
+
+### Hold Simulation (Host Target Only)
+
+When a loop-end marker is set, a **Hold** button appears in the timeline controls. Press and hold it (or use the Hold Sim keybind, default `H`) to simulate deadsync playback:
+
+- The intro plays through once
+- The loop region repeats while the button is held
+- Releasing snaps to the first outro frame (matching deadsync's snap-on-release behavior)
+- Pressing again during the outro jumps back into the loop region
+
+Use this to verify the feel of judgement GIFs - especially the transition from loop to outro - before testing on hardware.
+
+### Total Time
+
+The bottom of the timeline displays the total animation duration in seconds. When a loop-end marker is set, it also shows the intro, loop, and outro durations separately (e.g. `Total: 1.20s (intro 0.10s, loop 0.70s, outro 0.40s)`).
+
+### Preview Speed
+
+A speed slider in the timeline footer adjusts how fast the preview and hardware playback run, from 0.05x to 4x (logarithmic). This is an authoring aid only - it does not change saved frame timing or the exported GIF. Click **1x** to reset to normal speed.
+
 ---
 
 ## LED Preview
@@ -173,7 +254,10 @@ To see a more accurate color representation of what the hardware will look like,
 
 ### New (Ctrl+N)
 
-Create a new animation. Choose between Modern (23×24) and Legacy (14×15) mode.
+Create a new animation. Choose:
+- **Size** - Modern (23×24) or Legacy (14×15)
+- **Extent** - Full Pad (3×3 grid) or Single Panel
+- **Target** - Firmware (upload caps enforced) or Host (deadsync playback, uncapped)
 
 ### Open (Ctrl+O)
 
@@ -305,6 +389,8 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Duplicate Frame | D | Remappable |
 | Delete Frame | Delete | Remappable |
 | Shift Frame | ,/. | Remappable |
+| Hold Sim | H | Remappable; only active when a loop-end marker is set |
+| Adjust HSV | Ctrl+E | Fixed shortcut |
 
 On macOS, Ctrl shortcuts use Cmd instead.
 
@@ -320,3 +406,8 @@ On macOS, Ctrl shortcuts use Cmd instead.
 - **Use composite preview** - verify that your pressed animation looks good overlaid on the released animation with actual pad input.
 - **Frame duration matters** - the pad refreshes at 30 FPS, so durations below ~33ms won't produce visible differences on hardware.
 - **Black = transparent** - in pressed animations, black pixels let the released animation show through. Use (1,1,1) if you want "almost black" that's still opaque.
+- **Use Host target for deadsync judgement GIFs** - switch the canvas target to Host (Edit → Canvas Target) to unlock the loop-end marker and remove firmware caps when authoring per-panel GIFs for deadsync.
+- **Author judgement GIFs on single panels** - create a Single Panel canvas for cleaner focus when designing per-panel judgement GIFs. Hardware preview still works on single-panel canvases.
+- **Use HSV Adjust to recolor existing animations** - instead of redrawing, open Adjust HSV, shift the hue, and apply to all frames to get a quick color variant.
+- **Slow preview to time the outro** - set preview speed to 0.25x or lower before pressing Hold Sim to see exactly when the snap to outro happens and whether the transition feels right.
+- **Use Clear Panel (All Frames) to reset one panel** - when a single panel's design is wrong across the whole animation, Clear Panel (All Frames) wipes just that panel without touching the others.

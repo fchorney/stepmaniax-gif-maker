@@ -15,12 +15,34 @@ void RenderPreview(AppState &app)
 
         ImGui::Checkbox("Hardware colors (66%)", &hwColors);
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview with the 66%% color scaling applied by hardware"); ImGui::EndTooltip(); }
-        ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 15.0f, "%.0f");
+        ImGui::SliderFloat("Zoom##prev", &app.previewZoom, 3.0f, 40.0f, "%.0f");
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Preview zoom level (Ctrl+Scroll)"); ImGui::EndTooltip(); }
+
+        // Which physical pad panel a single-panel canvas lights during live hardware preview.
+        if (app.canvas.extent == CanvasExtent::SinglePanel)
+        {
+            static const char *slotNames[9] = {
+                "Top-left", "Up", "Top-right",
+                "Left", "Center", "Right",
+                "Bottom-left", "Down", "Bottom-right"
+            };
+            int &slot = app.singlePanelPreviewSlot;
+            if (slot < 0 || slot > 8) slot = 1;
+            ImGui::SetNextItemWidth(140);
+            if (ImGui::BeginCombo("Pad slot", slotNames[slot]))
+            {
+                for (int i = 0; i < 9; i++)
+                    if (ImGui::Selectable(slotNames[i], slot == i))
+                        slot = i;
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Which physical pad panel lights up during live hardware preview");
+        }
 
         if (!previewPlaying)
         {
-            if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = app.canvas.currentFrame; }
+            if (ImGui::Button("Play##prev")) { previewPlaying = true; previewLastTime = ImGui::GetTime(); previewFrame = app.canvas.currentFrame; if (previewFrame >= (int)app.canvas.frames.size() - 1) previewFrame = 0; }
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Play animation in preview"); ImGui::EndTooltip(); }
         }
         else
@@ -45,12 +67,20 @@ void RenderPreview(AppState &app)
             double now = ImGui::GetTime();
             if (previewFrame >= totalFrames) previewFrame = 0;
             float dur = app.canvas.frames[previewFrame].duration;
-            if (now - previewLastTime >= dur)
+            if ((now - previewLastTime) * app.previewSpeed >= dur)
             {
                 previewLastTime = now;
                 previewFrame++;
                 if (previewFrame >= totalFrames)
-                    previewFrame = app.canvas.loopFrame;
+                {
+                    if (app.loopPlayback)
+                        previewFrame = app.canvas.loopFrame;
+                    else
+                    {
+                        previewFrame = totalFrames - 1;
+                        previewPlaying = false;
+                    }
+                }
             }
         }
 
@@ -68,21 +98,26 @@ void RenderPreview(AppState &app)
         int outerGrid = 4;
         float outerSpan = (outerGrid - 1) * ledSpacing;
         float panelSize = outerSpan + ledSpacing * 2;
-        float totalSize = panelSize * 3 + panelGap * 2;
+        int gridN = (app.canvas.extent == CanvasExtent::SinglePanel) ? 1 : 3;
+        float totalSize = panelSize * gridN + panelGap * (gridN - 1);
 
-        // Center horizontally in available space
+        // Center horizontally; a single panel is also centered vertically so it sits in
+        // the middle of the preview pane rather than the top-left corner.
         ImVec2 avail = ImGui::GetContentRegionAvail();
         float offsetX = (avail.x > totalSize) ? (avail.x - totalSize) * 0.5f : 0;
         if (offsetX > 0)
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0f);
+        float offsetY = 10.0f;
+        if (app.canvas.extent == CanvasExtent::SinglePanel && avail.y > totalSize)
+            offsetY = (avail.y - totalSize) * 0.5f;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
 
         ImVec2 origin = ImGui::GetCursorScreenPos();
         draw->AddRectFilled(origin, ImVec2(origin.x + totalSize, origin.y + totalSize), IM_COL32(20, 20, 20, 255));
 
         float ledRadius = app.previewZoom * 0.35f;
 
-        for (int panel = 0; panel < 9; panel++)
+        for (int panel = 0; panel < app.canvas.PanelCount(); panel++)
         {
             int pcol = panel % 3;
             int prow = panel / 3;
@@ -171,7 +206,7 @@ void RenderPreview(AppState &app)
         {
             app.previewZoom += io.MouseWheel * 1.0f;
             if (app.previewZoom < 3.0f) app.previewZoom = 3.0f;
-            if (app.previewZoom > 15.0f) app.previewZoom = 15.0f;
+            if (app.previewZoom > 40.0f) app.previewZoom = 40.0f;
         }
     }
     ImGui::End();

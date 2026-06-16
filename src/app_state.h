@@ -29,6 +29,9 @@ struct AppState
     ImVec4 currentColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
     float cellSize = 28.0f;
     float previewZoom = 15.0f;
+    float previewSpeed = 1.0f; // playback/preview speed multiplier; never affects saved timing
+    int singlePanelPreviewSlot = 1; // which physical pad panel (0..8) lights a single-panel canvas
+    bool loopPlayback = true; // when false, playback runs once and stops on the last frame
     bool strokeActive = false;
     int rightClickPanel = -1;
     std::vector<Color> panelClipboard;
@@ -77,6 +80,7 @@ struct AppState
     bool showSettings = false;
     bool showNewDialog = false;
     bool showExportWarning = false;
+    bool showHsvDialog = false;
 
     // Onion skin
     bool onionSkin = false;

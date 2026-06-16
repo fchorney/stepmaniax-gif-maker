@@ -28,6 +28,7 @@ struct Keybindings
     int deleteFrame = 522;  // ImGuiKey_Delete
     int shiftLeft = 597;    // ImGuiKey_Comma
     int shiftRight = 599;   // ImGuiKey_Period
+    int holdSim = 553;      // ImGuiKey_H
 };
 
 struct Preferences

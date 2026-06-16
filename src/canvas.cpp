@@ -2,6 +2,7 @@
 #include "canvas.h"
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <set>
 
 Color CanvasFrame::GetPixel(int x, int y, int width) const
@@ -18,18 +19,21 @@ void CanvasFrame::SetPixel(int x, int y, int width, Color c)
         pixels[idx] = c;
 }
 
-void Canvas::Init(CanvasMode m)
+void Canvas::Init(CanvasMode m, CanvasExtent e, CanvasTarget t)
 {
     mode = m;
+    extent = e;
+    target = t;
     frames.clear();
     currentFrame = 0;
     loopFrame = 0;
+    loopEndFrame = -1;
     AddFrame();
 }
 
 void Canvas::AddFrame()
 {
-    if ((int)frames.size() >= 32) return;
+    if ((int)frames.size() >= MaxFrames()) return;
     CanvasFrame f;
     f.pixels.resize(Width() * Height(), Color{0, 0, 0});
     if (frames.empty())
@@ -46,7 +50,7 @@ void Canvas::AddFrame()
 
 void Canvas::DuplicateFrame(int idx)
 {
-    if ((int)frames.size() >= 32) return;
+    if ((int)frames.size() >= MaxFrames()) return;
     if (idx < 0 || idx >= (int)frames.size()) return;
     CanvasFrame copy = frames[idx];
     frames.insert(frames.begin() + idx + 1, std::move(copy));
@@ -62,6 +66,8 @@ void Canvas::DeleteFrame(int idx)
         currentFrame = (int)frames.size() - 1;
     if (loopFrame >= (int)frames.size())
         loopFrame = (int)frames.size() - 1;
+    if (loopEndFrame >= (int)frames.size())
+        loopEndFrame = (int)frames.size() - 1;
 }
 
 CanvasFrame &Canvas::CurrentFrame() { return frames[currentFrame]; }
@@ -70,6 +76,9 @@ const CanvasFrame &Canvas::CurrentFrame() const { return frames[currentFrame]; }
 int Canvas::PanelAt(int x, int y) const
 {
     if (IsGutter(x, y) || IsFlagRow(x, y)) return -1;
+
+    if (extent == CanvasExtent::SinglePanel)
+        return 0; // only one panel
 
     if (mode == CanvasMode::Modern)
     {
@@ -105,6 +114,9 @@ bool Canvas::IsGutter(int x, int y) const
 {
     if (IsFlagRow(x, y)) return false;
 
+    if (extent == CanvasExtent::SinglePanel)
+        return false; // a single panel has no inter-panel gutters
+
     if (mode == CanvasMode::Modern)
         return (x == 7 || x == 15 || y == 7 || y == 15);
     else
@@ -120,6 +132,19 @@ bool Canvas::IsFlagRow(int x, int y) const
 bool Canvas::IsLedPosition(int x, int y) const
 {
     if (IsGutter(x, y) || IsFlagRow(x, y)) return false;
+
+    if (extent == CanvasExtent::SinglePanel)
+    {
+        if (mode == CanvasMode::Modern)
+        {
+            // Single 7x7 panel: outer 4x4 at even coords, inner 3x3 at odd coords (<=5).
+            if (x % 2 == 0 && y % 2 == 0) return true;
+            if (x % 2 == 1 && y % 2 == 1 && x <= 5 && y <= 5) return true;
+            return false;
+        }
+        // Legacy single 4x4 panel: every position is an LED.
+        return x < 4 && y < 4;
+    }
 
     if (mode == CanvasMode::Modern)
     {
@@ -158,10 +183,76 @@ void Canvas::ClearPanel(int panel)
                 frame.SetPixel(x, y, w, Color{0, 0, 0});
 }
 
+void Canvas::ClearPanelAllFrames(int panel)
+{
+    if (panel < 0 || panel > 8) return;
+    int w = Width(), h = Height();
+    for (auto &frame : frames)
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (PanelAt(x, y) == panel && IsLedPosition(x, y))
+                    frame.SetPixel(x, y, w, Color{0, 0, 0});
+}
+
 void Canvas::ClearAll()
 {
-    for (int p = 0; p < 9; p++)
+    for (int p = 0; p < PanelCount(); p++)
         ClearPanel(p);
+}
+
+Color AdjustColorHsv(Color in, const HsvAdjust &adj)
+{
+    float r = in.r / 255.0f, g = in.g / 255.0f, b = in.b / 255.0f;
+    float mx = std::max({r, g, b});
+    float mn = std::min({r, g, b});
+    float d = mx - mn;
+
+    // RGB -> HSV.
+    float h = 0.0f;
+    if (d > 1e-6f)
+    {
+        if (mx == r) h = 60.0f * std::fmod((g - b) / d, 6.0f);
+        else if (mx == g) h = 60.0f * ((b - r) / d + 2.0f);
+        else h = 60.0f * ((r - g) / d + 4.0f);
+        if (h < 0.0f) h += 360.0f;
+    }
+    float s = (mx <= 1e-6f) ? 0.0f : d / mx;
+    float v = mx;
+
+    // Apply the adjustment: hue rotates; saturation and value are gain (mul)
+    // then bias (add), so a bias can push any pixel across the full range.
+    h = std::fmod(h + adj.hue_deg, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+    s = std::clamp(s * adj.sat_mul + adj.sat_add, 0.0f, 1.0f);
+    v = std::clamp(v * adj.val_mul + adj.val_add, 0.0f, 1.0f);
+
+    // HSV -> RGB.
+    float c = v * s;
+    float x = c * (1.0f - std::fabs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+    float m = v - c;
+    float rr, gg, bb;
+    if (h < 60.0f) { rr = c; gg = x; bb = 0.0f; }
+    else if (h < 120.0f) { rr = x; gg = c; bb = 0.0f; }
+    else if (h < 180.0f) { rr = 0.0f; gg = c; bb = x; }
+    else if (h < 240.0f) { rr = 0.0f; gg = x; bb = c; }
+    else if (h < 300.0f) { rr = x; gg = 0.0f; bb = c; }
+    else { rr = c; gg = 0.0f; bb = x; }
+
+    auto to8 = [](float f) {
+        return (uint8_t)std::lround(std::clamp((f) * 255.0f, 0.0f, 255.0f));
+    };
+    return Color{to8(rr + m), to8(gg + m), to8(bb + m)};
+}
+
+void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj)
+{
+    if (frame_index < 0 || frame_index >= (int)frames.size()) return;
+    auto &frame = frames[frame_index];
+    int w = Width(), h = Height();
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            if (IsLedPosition(x, y))
+                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
 }
 
 int Canvas::ColorCountForPanelAllFrames(int panel) const

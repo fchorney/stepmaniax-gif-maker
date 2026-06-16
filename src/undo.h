@@ -42,6 +42,7 @@ private:
         CanvasMode mode;
         int currentFrame;
         int loopFrame;
+        int loopEndFrame;
         std::vector<CanvasFrame> frames;
         std::string label;
     };

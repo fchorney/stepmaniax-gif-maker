@@ -161,18 +161,25 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
     }
 
     int w = state.width, h = state.height;
-    if ((w == 14 && h == 15) || (w == 23 && h == 24))
-    {
-        // Valid SMX dimensions
-    }
+
+    // Infer the canvas shape from the GIF dimensions.
+    //   23x24 / 14x15 -> full pad (Modern / Legacy)
+    //   7x8  / 4x5    -> single panel (Modern / Legacy), authored for host playback
+    CanvasExtent extent;
+    CanvasMode mode;
+    if (w == 23 && h == 24)      { extent = CanvasExtent::FullPad;     mode = CanvasMode::Modern; }
+    else if (w == 14 && h == 15) { extent = CanvasExtent::FullPad;     mode = CanvasMode::Legacy; }
+    else if (w == 7 && h == 8)   { extent = CanvasExtent::SinglePanel; mode = CanvasMode::Modern; }
+    else if (w == 4 && h == 5)   { extent = CanvasExtent::SinglePanel; mode = CanvasMode::Legacy; }
     else
     {
-        outError = "GIF must be 14x15 or 23x24. Got " + std::to_string(w) + "x" + std::to_string(h) + ".";
+        outError = "GIF must be 23x24 / 14x15 (full pad) or 7x8 / 4x5 (single panel). Got "
+                   + std::to_string(w) + "x" + std::to_string(h) + ".";
         return false;
     }
 
-    CanvasMode mode = (w == 23) ? CanvasMode::Modern : CanvasMode::Legacy;
     canvas.mode = mode;
+    canvas.extent = extent;
     canvas.frames = std::move(state.frames);
     canvas.currentFrame = 0;
 
@@ -190,6 +197,24 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
         }
     }
 
+    // Detect the loop-end marker: pixel (1, h-1) with R >= 128 marks the last
+    // frame of the loop region; later frames form a release outro (a deadsync
+    // host-playback extension; firmware ignores it).
+    canvas.loopEndFrame = -1;
+    for (int f = 0; f < (int)canvas.frames.size(); f++)
+    {
+        Color c = canvas.frames[f].GetPixel(1, h - 1, w);
+        if (c.r >= 128)
+        {
+            canvas.loopEndFrame = f;
+            canvas.frames[f].SetPixel(1, h - 1, w, Color{0, 0, 0});
+            break;
+        }
+    }
+    // A loop end before the loop start is author error; deadsync ignores it too.
+    if (canvas.loopEndFrame >= 0 && canvas.loopEndFrame < canvas.loopFrame)
+        canvas.loopEndFrame = -1;
+
     // Clear non-LED pixels (gutters, flag row, non-sampled positions)
     bool modified = false;
     for (auto &frame : canvas.frames)
@@ -201,6 +226,30 @@ bool ImportGif(const std::string &path, Canvas &canvas, std::string &outError, b
                     if (!c.IsBlack()) modified = true;
                     frame.SetPixel(x, y, w, Color{0, 0, 0});
                 }
+
+    // Target: firmware upload is only possible for a full-pad Modern animation that fits the
+    // firmware caps (<=32 frames and <=15 colors per panel). Everything else is host-only.
+    // The guess can be wrong for a host-authored gif that happens to fit the caps;
+    // Edit > Target switches it after opening.
+    canvas.target = CanvasTarget::Firmware;
+    if (extent != CanvasExtent::FullPad || mode != CanvasMode::Modern
+        || (int)canvas.frames.size() > 32)
+    {
+        canvas.target = CanvasTarget::Host;
+    }
+    else
+    {
+        for (int p = 0; p < canvas.PanelCount(); p++)
+            if (canvas.ColorCountForPanelAllFrames(p) > 15)
+            {
+                canvas.target = CanvasTarget::Host;
+                break;
+            }
+    }
+    // A loop-end marker is a host-playback extension, so its presence means the
+    // gif was authored for the host regardless of the firmware caps.
+    if (canvas.loopEndFrame >= 0)
+        canvas.target = CanvasTarget::Host;
 
     if (pixelsModified) *pixelsModified = modified;
     return true;

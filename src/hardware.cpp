@@ -3,6 +3,53 @@
 #include <SMX.h>
 #include <cstring>
 
+// Copy one panel's LEDs from a canvas frame into the SMX_SetLights2 buffer.
+// srcCol/srcRow locate the source panel in the canvas; destSlot is the physical 0..8 position.
+static void WritePanelLeds(char *lightData, const CanvasFrame &frame, int w,
+                           CanvasMode mode, int srcCol, int srcRow, int destSlot)
+{
+    int ledIdx = 0;
+    if (mode == CanvasMode::Modern)
+    {
+        // Outer 4x4 at even coords
+        for (int dy = 0; dy < 4; dy++)
+            for (int dx = 0; dx < 4; dx++)
+            {
+                Color c = frame.GetPixel(srcCol * 8 + dx * 2, srcRow * 8 + dy * 2, w);
+                int offset = destSlot * 75 + ledIdx * 3;
+                lightData[offset + 0] = c.r;
+                lightData[offset + 1] = c.g;
+                lightData[offset + 2] = c.b;
+                ledIdx++;
+            }
+        // Inner 3x3 at odd coords
+        for (int dy = 0; dy < 3; dy++)
+            for (int dx = 0; dx < 3; dx++)
+            {
+                Color c = frame.GetPixel(srcCol * 8 + dx * 2 + 1, srcRow * 8 + dy * 2 + 1, w);
+                int offset = destSlot * 75 + ledIdx * 3;
+                lightData[offset + 0] = c.r;
+                lightData[offset + 1] = c.g;
+                lightData[offset + 2] = c.b;
+                ledIdx++;
+            }
+    }
+    else
+    {
+        // Legacy: 4x4 at (col*5, row*5)
+        for (int dy = 0; dy < 4; dy++)
+            for (int dx = 0; dx < 4; dx++)
+            {
+                Color c = frame.GetPixel(srcCol * 5 + dx, srcRow * 5 + dy, w);
+                int offset = destSlot * 48 + ledIdx * 3;
+                lightData[offset + 0] = c.r;
+                lightData[offset + 1] = c.g;
+                lightData[offset + 2] = c.b;
+                ledIdx++;
+            }
+    }
+}
+
 void UpdateHardware(AppState &app)
 {
     // --- Composite Hardware Preview ---
@@ -17,7 +64,7 @@ void UpdateHardware(AppState &app)
             int relTotal = (int)app.compositeReleased.frames.size();
             if (relTotal > 1)
             {
-                app.compositeFrameTime += 1.0 / 30.0;
+                app.compositeFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.compositeReleased.frames[app.compositeRelFrame].duration;
                 if (app.compositeFrameTime >= dur)
                 {
@@ -129,7 +176,7 @@ void UpdateHardware(AppState &app)
             // Advance pressed animation with proper timing
             if (app.compositePressedLoaded && !app.compositePressed.frames.empty())
             {
-                app.compositePrsFrameTime += 1.0 / 30.0;
+                app.compositePrsFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.compositePressed.frames[app.compositePrsFrame].duration;
                 if (app.compositePrsFrameTime >= dur)
                 {
@@ -154,14 +201,19 @@ void UpdateHardware(AppState &app)
             int totalFrames = (int)app.canvas.frames.size();
             if (!app.livePreviewSync && totalFrames > 1)
             {
-                app.livePreviewFrameTime += 1.0 / 30.0;
+                app.livePreviewFrameTime += (1.0 / 30.0) * app.previewSpeed;
                 float dur = app.canvas.frames[app.livePreviewFrame].duration;
                 if (app.livePreviewFrameTime >= dur)
                 {
                     app.livePreviewFrameTime -= dur;
                     app.livePreviewFrame++;
                     if (app.livePreviewFrame >= totalFrames)
-                        app.livePreviewFrame = app.canvas.loopFrame;
+                    {
+                        if (app.loopPlayback)
+                            app.livePreviewFrame = app.canvas.loopFrame;
+                        else
+                            app.livePreviewFrame = totalFrames - 1; // one-shot: hold last frame
+                    }
                 }
             }
 
@@ -177,59 +229,13 @@ void UpdateHardware(AppState &app)
             const auto &frame = app.canvas.frames[displayFrame];
             int w = app.canvas.Width();
 
-            // Fill pad 0 (first half of buffer: 675 bytes modern, 432 bytes legacy)
-            for (int panel = 0; panel < 9; panel++)
-            {
-                int col = panel % 3;
-                int row = panel / 3;
-                int ledIdx = 0;
-
-                if (app.canvas.mode == CanvasMode::Modern)
-                {
-                    // Outer 4x4 at even coords
-                    for (int dy = 0; dy < 4; dy++)
-                        for (int dx = 0; dx < 4; dx++)
-                        {
-                            int px = col * 8 + dx * 2;
-                            int py = row * 8 + dy * 2;
-                            Color c = frame.GetPixel(px, py, w);
-                            int offset = panel * 75 + ledIdx * 3;
-                            lightData[offset + 0] = c.r;
-                            lightData[offset + 1] = c.g;
-                            lightData[offset + 2] = c.b;
-                            ledIdx++;
-                        }
-                    // Inner 3x3 at odd coords
-                    for (int dy = 0; dy < 3; dy++)
-                        for (int dx = 0; dx < 3; dx++)
-                        {
-                            int px = col * 8 + dx * 2 + 1;
-                            int py = row * 8 + dy * 2 + 1;
-                            Color c = frame.GetPixel(px, py, w);
-                            int offset = panel * 75 + ledIdx * 3;
-                            lightData[offset + 0] = c.r;
-                            lightData[offset + 1] = c.g;
-                            lightData[offset + 2] = c.b;
-                            ledIdx++;
-                        }
-                }
-                else
-                {
-                    // Legacy: 4x4 at (col*5, row*5)
-                    for (int dy = 0; dy < 4; dy++)
-                        for (int dx = 0; dx < 4; dx++)
-                        {
-                            int px = col * 5 + dx;
-                            int py = row * 5 + dy;
-                            Color c = frame.GetPixel(px, py, w);
-                            int offset = panel * 48 + ledIdx * 3;
-                            lightData[offset + 0] = c.r;
-                            lightData[offset + 1] = c.g;
-                            lightData[offset + 2] = c.b;
-                            ledIdx++;
-                        }
-                }
-            }
+            // Fill pad 0 (first half of the buffer). A single-panel canvas lights only the
+            // chosen physical slot; a full pad fills all 9 panels.
+            if (app.canvas.extent == CanvasExtent::SinglePanel)
+                WritePanelLeds(lightData, frame, w, app.canvas.mode, 0, 0, app.singlePanelPreviewSlot);
+            else
+                for (int panel = 0; panel < 9; panel++)
+                    WritePanelLeds(lightData, frame, w, app.canvas.mode, panel % 3, panel / 3, panel);
 
             // Send to both pads (pad 1 gets same data as pad 0 for now)
             int size = (app.canvas.mode == CanvasMode::Modern) ? 1350 : 864;

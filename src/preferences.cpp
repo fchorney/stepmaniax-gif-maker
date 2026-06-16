@@ -84,6 +84,7 @@ void Preferences::Load(const std::string &path)
             if (k.contains("delete_frame")) keys.deleteFrame = k["delete_frame"];
             if (k.contains("shift_left")) keys.shiftLeft = k["shift_left"];
             if (k.contains("shift_right")) keys.shiftRight = k["shift_right"];
+            if (k.contains("hold_sim")) keys.holdSim = k["hold_sim"];
         }
     } catch (...) {
         // Ignore malformed config, use defaults
@@ -117,6 +118,7 @@ void Preferences::Save(const std::string &path) const
         {"delete_frame", keys.deleteFrame},
         {"shift_left", keys.shiftLeft},
         {"shift_right", keys.shiftRight},
+        {"hold_sim", keys.holdSim},
     };
 
     std::ofstream f(path);

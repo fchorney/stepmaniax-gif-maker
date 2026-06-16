@@ -155,9 +155,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Save", SHORTCUT_MOD "+S"))
             {
                 bool overLimit = false;
-                for (int p = 0; p < 9; p++)
-                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                        overLimit = true;
+                if (app.canvas.target == CanvasTarget::Firmware)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                            overLimit = true;
                 if (overLimit)
                     app.showExportWarning = true;
                 else if (app.currentFilePath.empty())
@@ -178,9 +179,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Save As...", SHORTCUT_MOD "+Shift+S"))
             {
                 bool overLimit = false;
-                for (int p = 0; p < 9; p++)
-                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                        overLimit = true;
+                if (app.canvas.target == CanvasTarget::Firmware)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                            overLimit = true;
                 if (overLimit)
                     app.showExportWarning = true;
                 else
@@ -209,7 +211,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.frameClipboard = app.canvas.CurrentFrame();
                 app.frameClipboardValid = true;
             }
-            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < Canvas::MaxFrames))
+            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
             {
                 app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
                 app.canvas.currentFrame++;
@@ -218,7 +220,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::Separator();
             if (ImGui::BeginMenu("Clear Panel"))
             {
-                for (int p = 0; p < 9; p++)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[16];
                     snprintf(label, sizeof(label), "Panel %d", p);
@@ -226,10 +228,20 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
-            if (ImGui::BeginMenu("Quantize Panel"))
+            if (ImGui::BeginMenu("Clear Panel (All Frames)"))
             {
-                for (int p = 0; p < 9; p++)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                {
+                    char label[16];
+                    snprintf(label, sizeof(label), "Panel %d", p);
+                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanelAllFrames(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel (All Frames)"); }
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
+            if (ImGui::BeginMenu("Quantize Panel", app.canvas.target == CanvasTarget::Firmware))
+            {
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[32];
                     snprintf(label, sizeof(label), "Panel %d", p);
@@ -237,10 +249,58 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Quantize All Panels"))
+            if (ImGui::MenuItem("Quantize All Panels", nullptr, false, app.canvas.target == CanvasTarget::Firmware))
             {
-                for (int p = 0; p < 9; p++) app.canvas.QuantizePanel(p);
+                for (int p = 0; p < app.canvas.PanelCount(); p++) app.canvas.QuantizePanel(p);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) app.showHsvDialog = true;
+            ImGui::Separator();
+            // Convert the open canvas between targets. Opening a gif guesses its
+            // target from the firmware caps, which mislabels a host-authored gif
+            // that happens to fit them; this lets the author correct it.
+            if (ImGui::BeginMenu("Target"))
+            {
+                bool isFirmware = app.canvas.target == CanvasTarget::Firmware;
+                bool shapeOk = app.canvas.mode == CanvasMode::Modern
+                               && app.canvas.extent == CanvasExtent::FullPad;
+                bool framesOk = (int)app.canvas.frames.size() <= 32;
+                bool colorsOk = true;
+                if (shapeOk && framesOk)
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        {
+                            colorsOk = false;
+                            break;
+                        }
+                bool firmwareOk = shapeOk && framesOk && colorsOk;
+                if (ImGui::MenuItem("Firmware (EEPROM upload; 32-frame, 15-color caps)", nullptr,
+                                    isFirmware, firmwareOk)
+                    && !isFirmware)
+                {
+                    app.canvas.target = CanvasTarget::Firmware;
+                    app.undo.SaveState(app.canvas, "Target: Firmware");
+                }
+                if (!firmwareOk && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    if (!shapeOk)
+                        ImGui::SetTooltip("Firmware upload needs a Modern full-pad canvas.");
+                    else if (!framesOk)
+                        ImGui::SetTooltip("Firmware upload caps animations at 32 frames;\ndelete frames first.");
+                    else
+                        ImGui::SetTooltip("A panel uses more than 15 colors;\nquantize panels first (Edit > Quantize).");
+                }
+                if (ImGui::MenuItem("Host (deadsync playback; uncapped, no upload)", nullptr,
+                                    !isFirmware)
+                    && isFirmware)
+                {
+                    app.canvas.target = CanvasTarget::Host;
+                    app.undo.SaveState(app.canvas, "Target: Host");
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Host playback unlocks the loop-end / outro marker\nand removes the frame and color caps.");
+                ImGui::EndMenu();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Settings...")) app.showSettings = true;
@@ -283,7 +343,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     app.livePreviewFrameTime = 0;
                 }
             }
-            if (ImGui::BeginMenu("Upload to Firmware", info0.m_bConnected || info1.m_bConnected))
+            if (ImGui::BeginMenu("Upload to Firmware", (info0.m_bConnected || info1.m_bConnected) && app.canvas.target == CanvasTarget::Firmware))
             {
                 auto doUpload = [&](bool pad0, bool pad1, SMX_LightsType type, bool fillBlack = false) {
                     if (app.canvas.mode != CanvasMode::Modern)
@@ -376,7 +436,12 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 ImGui::EndMenu();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Composite Preview...", nullptr, false, info0.m_bConnected || info1.m_bConnected))
+            // Composite preview plays full-pad GIFs across the whole stage, so it
+            // is disabled for single-panel canvases like the other full-pad-only
+            // hardware actions.
+            if (ImGui::MenuItem("Composite Preview...", nullptr, false,
+                                (info0.m_bConnected || info1.m_bConnected) &&
+                                    app.canvas.extent == CanvasExtent::FullPad))
                 app.showCompositeDialog = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Re-enable Auto Lights", nullptr, false, info0.m_bConnected || info1.m_bConnected))
@@ -459,6 +524,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Delete Frame", &app.prefs.keys.deleteFrame);
         KeybindRow("Shift Left", &app.prefs.keys.shiftLeft);
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
+        KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
@@ -490,6 +556,80 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("Close"))
         {
             rebindTarget = nullptr;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // --- Adjust HSV Popup ---
+    // Live-previews on the canvas: each frame the popup recomputes the affected
+    // frames from a snapshot taken on open, so the sliders are non-destructive
+    // until Apply (and fully reverted on Cancel).
+    if (app.showHsvDialog)
+    {
+        ImGui::OpenPopup("Adjust HSV");
+        app.showHsvDialog = false;
+    }
+    static bool hsvInit = false;
+    static std::vector<CanvasFrame> hsvSnapshot;
+    static int hsvFrame = 0;
+    static HsvAdjust hsvAdj;
+    static bool hsvAllFrames = false;
+    if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        if (!hsvInit)
+        {
+            hsvSnapshot = app.canvas.frames;
+            hsvFrame = app.canvas.currentFrame;
+            hsvAdj = HsvAdjust{};
+            hsvInit = true;
+        }
+
+        // Saturation and value each have a gain (x) and a bias (+/-). The bias
+        // is what lets dim or black pixels reach the full range; gain alone is
+        // relative to each pixel's original level.
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Hue shift", &hsvAdj.hue_deg, -180.0f, 180.0f, "%.0f deg");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Saturation x", &hsvAdj.sat_mul, 0.0f, 4.0f, "%.2fx");
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Saturation +/-", &hsvAdj.sat_add, -1.0f, 1.0f, "%+.2f");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Value x", &hsvAdj.val_mul, 0.0f, 4.0f, "%.2fx");
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Value +/-", &hsvAdj.val_add, -1.0f, 1.0f, "%+.2f");
+        ImGui::Spacing();
+        ImGui::Checkbox("All frames", &hsvAllFrames);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset"))
+            hsvAdj = HsvAdjust{};
+
+        // Recompute the preview from the snapshot every frame.
+        app.canvas.frames = hsvSnapshot;
+        if (hsvAllFrames)
+            for (int i = 0; i < (int)app.canvas.frames.size(); i++)
+                app.canvas.AdjustHsv(i, hsvAdj);
+        else
+            app.canvas.AdjustHsv(hsvFrame, hsvAdj);
+        app.colorCountsDirty = true;
+
+        ImGui::Separator();
+        if (ImGui::Button("Apply"))
+        {
+            app.dirty = true;
+            app.colorCountsDirty = true;
+            app.undo.SaveState(app.canvas, hsvAllFrames ? "Adjust HSV (all frames)" : "Adjust HSV");
+            hsvInit = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel"))
+        {
+            app.canvas.frames = hsvSnapshot;
+            app.colorCountsDirty = true;
+            hsvInit = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -823,19 +963,39 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("Create a new animation. This will discard current work.");
         ImGui::Separator();
-        static int newMode = 1;
-        ImGui::RadioButton("Legacy (14x15) - host playback only", &newMode, 0);
-        ImGui::RadioButton("Modern (23x24) - host playback + firmware upload", &newMode, 1);
+        static int newMode = 1;   // 0 = Legacy, 1 = Modern
+        static int newExtent = 0; // 0 = Full pad, 1 = Single panel
+        static int newTarget = 0; // 0 = Firmware, 1 = Host
+        ImGui::Text("LED format:");
+        ImGui::RadioButton("Legacy (4x4, 16 LEDs)", &newMode, 0);
+        ImGui::RadioButton("Modern (4x4 + 3x3, 25 LEDs)", &newMode, 1);
+        ImGui::Separator();
+        ImGui::Text("Canvas:");
+        ImGui::RadioButton("Full pad (9 panels)", &newExtent, 0);
+        ImGui::RadioButton("Single panel (per-panel judgement GIF)", &newExtent, 1);
+        ImGui::Separator();
+        // Firmware upload is only possible for a Modern full pad; everything else is host-only.
+        bool firmwareAllowed = (newMode == 1 && newExtent == 0);
+        if (!firmwareAllowed) newTarget = 1;
+        ImGui::Text("Target:");
+        ImGui::BeginDisabled(!firmwareAllowed);
+        ImGui::RadioButton("Firmware (EEPROM upload; 32-frame, 15-color caps)", &newTarget, 0);
+        ImGui::EndDisabled();
+        ImGui::RadioButton("Host (deadsync playback; uncapped, no upload)", &newTarget, 1);
+        if (!firmwareAllowed)
+            ImGui::TextDisabled("Only a Modern full pad can upload to firmware.");
         ImGui::Separator();
         if (ImGui::Button("Create"))
         {
             CanvasMode newCanvasMode = newMode == 1 ? CanvasMode::Modern : CanvasMode::Legacy;
-            if (newCanvasMode != app.canvas.mode)
+            CanvasExtent newCanvasExtent = newExtent == 1 ? CanvasExtent::SinglePanel : CanvasExtent::FullPad;
+            CanvasTarget newCanvasTarget = newTarget == 1 ? CanvasTarget::Host : CanvasTarget::Firmware;
+            if (newCanvasMode != app.canvas.mode || newCanvasExtent != app.canvas.extent)
             {
                 app.panelClipboard.clear();
                 app.panelClipboardValid = false;
             }
-            app.canvas.Init(newCanvasMode);
+            app.canvas.Init(newCanvasMode, newCanvasExtent, newCanvasTarget);
             app.currentFilePath.clear();
             app.dirty = false; app.undo.MarkSaved();
             app.undo.Clear();
@@ -876,13 +1036,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) app.showHsvDialog = true;
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {
             app.frameClipboard = app.canvas.CurrentFrame();
             app.frameClipboardValid = true;
         }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < Canvas::MaxFrames)
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
         {
             app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
             app.canvas.currentFrame++;
@@ -892,9 +1053,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             bool overLimit = false;
-            for (int p = 0; p < 9; p++)
-                if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                    overLimit = true;
+            if (app.canvas.target == CanvasTarget::Firmware)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
             if (overLimit)
                 app.showExportWarning = true;
             else if (app.currentFilePath.empty())
@@ -915,9 +1077,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             bool overLimit = false;
-            for (int p = 0; p < 9; p++)
-                if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
-                    overLimit = true;
+            if (app.canvas.target == CanvasTarget::Firmware)
+                for (int p = 0; p < app.canvas.PanelCount(); p++)
+                    if (app.canvas.ColorCountForPanelAllFrames(p) > 15)
+                        overLimit = true;
             if (overLimit)
                 app.showExportWarning = true;
             else
