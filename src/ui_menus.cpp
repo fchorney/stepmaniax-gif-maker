@@ -255,7 +255,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Adjust HSV...", "Ctrl+E")) app.showHsvDialog = true;
+            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) app.showHsvDialog = true;
             ImGui::Separator();
             // Convert the open canvas between targets. Opening a gif guesses its
             // target from the firmware caps, which mislabels a host-authored gif
