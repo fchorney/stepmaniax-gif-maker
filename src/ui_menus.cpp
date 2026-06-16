@@ -255,7 +255,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Adjust HSV...")) app.showHsvDialog = true;
+            if (ImGui::MenuItem("Adjust HSV...", "Ctrl+E")) app.showHsvDialog = true;
             ImGui::Separator();
             // Convert the open canvas between targets. Opening a gif guesses its
             // target from the firmware caps, which mislabels a host-authored gif
@@ -524,6 +524,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Delete Frame", &app.prefs.keys.deleteFrame);
         KeybindRow("Shift Left", &app.prefs.keys.shiftLeft);
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
+        KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
@@ -1035,6 +1036,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) app.showHsvDialog = true;
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {

@@ -163,7 +163,7 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 - Max 32 frames, max 15 colors per panel (for firmware upload; Host target is uncapped)
 - Black pixels are treated as transparent/off
 - Loop point encoded as a marker pixel in the flag row (x=0, y=height-1, R≥128)
-- Optional loop-end marker (x=1 in the flag row, Host target only): frames after it form a release outro. This is a [deadsync](https://github.com/fchorney/deadsync) extension for per-panel judgement GIFs - the intro plays once, the loop region repeats while the panel is held, and the outro plays on release. SMX firmware and the official SDK ignore this marker.
+- Optional loop-end marker (x=1 in the flag row, Host target only): frames after it form a release outro. This is a [deadsync](https://github.com/pnn64/deadsync) extension for per-panel judgement GIFs - the intro plays once, the loop region repeats while the panel is held, and the outro plays on release. SMX firmware and the official SDK ignore this marker.
 
 ### Keyboard Shortcuts
 
@@ -190,8 +190,10 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 | Duplicate Frame | D |
 | Delete Frame | Delete |
 | Shift Frame | ,/. |
+| Hold Sim | H |
+| Adjust HSV | Ctrl+E | Fixed shortcut, not remappable |
 
-All tool and timeline shortcuts are remappable in **Edit → Settings**.
+All tool and timeline shortcuts (except Ctrl+E) are remappable in **Edit → Settings**.
 
 On macOS, Ctrl shortcuts use Cmd instead.
 

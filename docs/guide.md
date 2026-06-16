@@ -203,11 +203,11 @@ When the canvas target is **Host**, right-clicking a frame also exposes a **Set 
 
 The loop-end frame is shown with an orange downward-pointing marker in the timeline. Right-click the same frame again to clear it.
 
-This is a [deadsync](https://github.com/fchorney/deadsync) extension for per-panel judgement GIFs. SMX firmware and the official SDK ignore the loop-end marker.
+This is a [deadsync](https://github.com/pnn64/deadsync) extension for per-panel judgement GIFs. SMX firmware and the official SDK ignore the loop-end marker.
 
 ### Hold Simulation (Host Target Only)
 
-When a loop-end marker is set, a **Hold** button appears in the timeline controls. Press and hold it to simulate deadsync playback:
+When a loop-end marker is set, a **Hold** button appears in the timeline controls. Press and hold it (or use the Hold Sim keybind, default `H`) to simulate deadsync playback:
 
 - The intro plays through once
 - The loop region repeats while the button is held
@@ -218,7 +218,7 @@ Use this to verify the feel of judgement GIFs - especially the transition from l
 
 ### Total Time
 
-The bottom of the timeline displays the total animation duration in seconds. When a loop-end marker is set, it also shows the loop region duration and outro duration separately (e.g. `Total: 1.20s (loop 0.80s, outro 0.40s)`).
+The bottom of the timeline displays the total animation duration in seconds. When a loop-end marker is set, it also shows the intro, loop, and outro durations separately (e.g. `Total: 1.20s (intro 0.10s, loop 0.70s, outro 0.40s)`).
 
 ### Preview Speed
 
@@ -389,6 +389,8 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Duplicate Frame | D | Remappable |
 | Delete Frame | Delete | Remappable |
 | Shift Frame | ,/. | Remappable |
+| Hold Sim | H | Remappable; only active when a loop-end marker is set |
+| Adjust HSV | Ctrl+E | Fixed shortcut |
 
 On macOS, Ctrl shortcuts use Cmd instead.
 

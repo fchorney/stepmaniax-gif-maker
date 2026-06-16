@@ -264,6 +264,36 @@ void RenderTimeline(AppState &app)
                         app.canvas.currentFrame = 0;
                 }
             }
+            if (app.canvas.loopEndFrame >= 0)
+            {
+                ImGuiKey holdKey = (ImGuiKey)app.prefs.keys.holdSim;
+                if (ImGui::IsKeyPressed(holdKey, false))
+                {
+                    playing = false;
+                    holdEngaged = true;
+                    if (!holdSim)
+                    {
+                        holdSim = true;
+                        app.canvas.currentFrame = 0;
+                        lastFrameTime = ImGui::GetTime();
+                    }
+                    else if (app.canvas.currentFrame > app.canvas.loopEndFrame)
+                    {
+                        app.canvas.currentFrame = std::min(app.canvas.loopFrame, app.canvas.loopEndFrame);
+                    }
+                }
+                if (ImGui::IsKeyReleased(holdKey))
+                {
+                    holdEngaged = false;
+                    int loopEnd = std::min(app.canvas.loopEndFrame, totalFrames - 1);
+                    if (app.canvas.currentFrame >= app.canvas.loopFrame
+                        && app.canvas.currentFrame <= loopEnd && loopEnd + 1 < totalFrames)
+                    {
+                        app.canvas.currentFrame = loopEnd + 1;
+                        lastFrameTime = ImGui::GetTime();
+                    }
+                }
+            }
         }
 
         ImGui::Separator();
@@ -417,12 +447,14 @@ void RenderTimeline(AppState &app)
         if (app.canvas.loopEndFrame >= 0)
         {
             int loopEnd = std::min(app.canvas.loopEndFrame, (int)app.canvas.frames.size() - 1);
-            float loopSecs = 0.0f, outroSecs = 0.0f;
+            float introSecs = 0.0f, loopSecs = 0.0f, outroSecs = 0.0f;
+            for (int i = 0; i < app.canvas.loopFrame; i++)
+                introSecs += app.canvas.frames[i].duration;
             for (int i = app.canvas.loopFrame; i <= loopEnd; i++)
                 loopSecs += app.canvas.frames[i].duration;
             for (int i = loopEnd + 1; i < (int)app.canvas.frames.size(); i++)
                 outroSecs += app.canvas.frames[i].duration;
-            ImGui::Text("Total: %.2fs (loop %.2fs, outro %.2fs)", totalSecs, loopSecs, outroSecs);
+            ImGui::Text("Total: %.2fs (intro %.2fs, loop %.2fs, outro %.2fs)", totalSecs, introSecs, loopSecs, outroSecs);
         }
         else if (app.canvas.loopFrame > 0)
         {
