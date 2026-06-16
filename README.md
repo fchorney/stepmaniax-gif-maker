@@ -31,10 +31,14 @@ We still need an icon for this app! I'm terrible at drawing/graphics related stu
 
 ## Features
 
-- **Pixel grid editor** for 14×15 (legacy) and 23×24 (modern) GIF formats
+- **Pixel grid editor** for 14×15 (legacy) and 23×24 (modern) GIF formats, full 3×3 pad or single-panel
 - **Drawing tools** - Draw, Erase, Fill, Replace, Pick Color
-- **Animation timeline** - add/duplicate/delete/reorder frames, per-frame duration, loop point, optional loop end with a press-and-hold playback simulation
-- **Live hardware preview** - stream animations to connected pads in real-time (sync or play mode)
+- **HSV adjust** - shift hue and apply gain+bias to saturation and value, on current frame or all frames
+- **Clear panel** - wipe a single panel on the current frame, or across all frames at once
+- **Animation timeline** - add/duplicate/delete/reorder frames, per-frame duration, loop point, optional loop-end marker with hold/release playback simulation
+- **Preview speed control** - slow down or speed up timeline and hardware playback (0.05x - 4x) without changing saved frame timing
+- **Canvas target** - Firmware mode (EEPROM upload, 32-frame/15-color caps) or Host mode (deadsync playback, uncapped, loop-end/outro authoring); switchable after creation
+- **Live hardware preview** - stream animations to connected pads in real-time (sync or play mode); works with single-panel canvases
 - **Firmware upload** - write released and pressed animations to pad EEPROM for offline playback
 - **Composite preview** - load released + pressed GIFs, preview overlay behavior with live pad input
 - **GIF import/export** - open and save standard GIF files compatible with the SMX SDK
@@ -129,12 +133,26 @@ cmake .. -DSMX_SDK_DIR=/path/to/stepmaniax-sdk-mp
 
 For a detailed walkthrough of all features, see the [User Guide](docs/guide.md).
 
-1. **File → New** to create a new animation (choose Legacy 14×15 or Modern 23×24)
+1. **File → New** to create a new animation (choose size, extent, and target)
 2. Draw on the pixel grid - only LED positions are editable
 3. Use the timeline to add frames and set durations
 4. **File → Save** to export as a GIF
 5. Connect a StepManiaX pad and use **Hardware → Preview on Pad** to see it live
-6. **Hardware → Upload to Firmware** to write the animation permanently
+6. **Hardware → Upload to Firmware** to write the animation permanently (Firmware target only)
+
+### Canvas Extent and Target
+
+When creating a new file (File → New), you choose two independent options:
+
+**Extent:**
+- **Full Pad** - edit all 9 panels at once in the 3×3 grid
+- **Single Panel** - edit one panel only; produces a GIF containing just that panel's pixel region
+
+**Target:**
+- **Firmware** - EEPROM upload mode; enforces the 32-frame and 15-color-per-panel caps; quantize and firmware upload are available
+- **Host** - deadsync playback mode; no frame/color caps; enables the loop-end/outro marker; firmware upload is disabled
+
+The target can be changed after creation via **Edit → Canvas Target**. The editor auto-detects the target on GIF import based on whether the animation exceeds firmware caps.
 
 ### GIF Format
 
@@ -142,10 +160,10 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 
 - **14×15** - legacy 4×4 LED mode (host playback only)
 - **23×24** - modern 25-LED mode (host playback + firmware upload)
-- Max 32 frames, max 15 colors per panel (for firmware upload)
+- Max 32 frames, max 15 colors per panel (for firmware upload; Host target is uncapped)
 - Black pixels are treated as transparent/off
-- Loop point encoded as a marker pixel in the flag row
-- Optional loop-end marker (second flag-row pixel, at x=1): frames after it form a release outro. Host-target canvases only; this is a [deadsync](https://github.com/fchorney/deadsync) extension for per-panel judgement GIFs (intro plays once, the loop region repeats while the panel is pressed, the outro plays on release). SMX firmware and the official SDK ignore it
+- Loop point encoded as a marker pixel in the flag row (x=0, y=height-1, R≥128)
+- Optional loop-end marker (x=1 in the flag row, Host target only): frames after it form a release outro. This is a [deadsync](https://github.com/fchorney/deadsync) extension for per-panel judgement GIFs - the intro plays once, the loop region repeats while the panel is held, and the outro plays on release. SMX firmware and the official SDK ignore this marker.
 
 ### Keyboard Shortcuts
 
