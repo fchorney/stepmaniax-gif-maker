@@ -25,10 +25,10 @@ fi
 echo "Bumping version to $VERSION"
 
 # CMakeLists.txt
-sed -i "s/project(stepmaniax-gif-maker VERSION [0-9]*\.[0-9]*\.[0-9]*/project(stepmaniax-gif-maker VERSION $VERSION/" CMakeLists.txt
+sed -i '' "s/project(stepmaniax-gif-maker VERSION [0-9]*\.[0-9]*\.[0-9]*/project(stepmaniax-gif-maker VERSION $VERSION/" CMakeLists.txt
 
 # package.sh Info.plist
-sed -i "s/<string>[0-9]*\.[0-9]*\.[0-9]*<\/string>/<string>$VERSION<\/string>/g" package.sh
+sed -i '' "s/<string>[0-9]*\.[0-9]*\.[0-9]*<\/string>/<string>$VERSION<\/string>/g" package.sh
 
 echo "Updated:"
 echo "  CMakeLists.txt"
