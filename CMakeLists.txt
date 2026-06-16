@@ -172,6 +172,10 @@ if(GIFMAKER_BUILD_TESTS)
     )
     target_include_directories(gifmaker_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(gifmaker_tests PRIVATE doctest_header)
+    # Suppress C5285: MSVC 17.10+ forbids std::tuple specialization; doctest v2.4.11 triggers it.
+    if(MSVC)
+        target_compile_options(gifmaker_tests PRIVATE /wd5285)
+    endif()
 
     enable_testing()
     add_test(NAME gifmaker_tests COMMAND gifmaker_tests)
