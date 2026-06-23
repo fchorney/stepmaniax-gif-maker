@@ -257,6 +257,26 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::Separator();
             if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) app.showHsvDialog = true;
             ImGui::Separator();
+            // Convert between LED densities. Modern packs 25 LEDs/panel (outer 4x4
+            // ring + inner 3x3); Legacy has only the outer 16. Modern->Legacy drops
+            // the inner ring; Legacy->Modern adds a blank one.
+            {
+                bool isModern = app.canvas.mode == CanvasMode::Modern;
+                const char *convLabel = isModern ? "Convert to Legacy (16 LED/panel)"
+                                                  : "Convert to Modern (25 LED/panel)";
+                if (ImGui::MenuItem(convLabel))
+                {
+                    app.canvas.ConvertMode(isModern ? CanvasMode::Legacy : CanvasMode::Modern);
+                    app.dirty = true;
+                    app.colorCountsDirty = true;
+                    app.undo.SaveState(app.canvas, "Convert Mode");
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(isModern
+                        ? "Drop each panel's inner 3x3 ring, keeping the outer 4x4 (16 LEDs).\nLegacy is host-playback only; it cannot be uploaded to firmware."
+                        : "Add a blank inner 3x3 ring to each panel (25 LEDs).\nModern is required for firmware upload.");
+            }
+            ImGui::Separator();
             // Convert the open canvas between targets. Opening a gif guesses its
             // target from the firmware caps, which mislabels a host-authored gif
             // that happens to fit them; this lets the author correct it.
