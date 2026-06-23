@@ -173,6 +173,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - **Add Frame** - append a new blank frame
 - **Duplicate Frame** - copy the current frame
 - **Delete Frame** - remove the current frame
+- **Delete All Left / Delete All Right** - right-click a frame to remove every frame before or after it; the loop markers are adjusted to stay valid
 - **Reorder** - drag frames or use Shift Left/Right shortcuts
 
 ### Playback

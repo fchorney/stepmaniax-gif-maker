@@ -308,60 +308,74 @@ void RenderTimeline(AppState &app)
         float thumbH = h * thumbScale;
 
         ImGui::BeginChild("##thumbs", ImVec2(0, thumbH + 20), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+        // Cache the visible x-range of the scroll viewport so per-frame
+        // visibility checks are O(1). Only thumbnails within this range get
+        // draw commands; off-screen ones still get an InvisibleButton so the
+        // layout (scroll width) and click detection remain correct.
+        const float visMinX = ImGui::GetWindowPos().x;
+        const float visMaxX = visMinX + ImGui::GetWindowSize().x;
+
         for (int f = 0; f < totalFrames; f++)
         {
             ImGui::PushID(f);
             ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImDrawList *draw = ImGui::GetWindowDrawList();
 
-            draw->AddRectFilled(pos, ImVec2(pos.x + thumbW, pos.y + thumbH), IM_COL32(15, 15, 15, 255));
-
-            if (f == app.canvas.currentFrame)
-                draw->AddRect(ImVec2(pos.x - 2, pos.y - 2),
-                    ImVec2(pos.x + thumbW + 2, pos.y + thumbH + 2),
-                    IM_COL32(255, 200, 0, 255), 0, 0, 2.0f);
-
-            // Loop point marker (cyan, pointing up); shifted left when the
-            // loop-end marker shares the frame.
-            if (f == app.canvas.loopFrame)
+            const bool visible = (pos.x + thumbW >= visMinX) && (pos.x < visMaxX);
+            if (visible)
             {
-                float cx = pos.x + thumbW * 0.5f - (f == app.canvas.loopEndFrame ? 7.0f : 0.0f);
-                float ty = pos.y + thumbH + 2;
-                draw->AddTriangleFilled(
-                    ImVec2(cx - 5, ty + 8),
-                    ImVec2(cx + 5, ty + 8),
-                    ImVec2(cx, ty),
-                    IM_COL32(0, 200, 255, 220));
-            }
+                ImDrawList *draw = ImGui::GetWindowDrawList();
 
-            // Loop-end marker (orange, pointing down): later frames are the outro.
-            if (f == app.canvas.loopEndFrame)
-            {
-                float cx = pos.x + thumbW * 0.5f + (f == app.canvas.loopFrame ? 7.0f : 0.0f);
-                float ty = pos.y + thumbH + 2;
-                draw->AddTriangleFilled(
-                    ImVec2(cx - 5, ty),
-                    ImVec2(cx + 5, ty),
-                    ImVec2(cx, ty + 8),
-                    IM_COL32(255, 160, 0, 220));
-            }
+                draw->AddRectFilled(pos, ImVec2(pos.x + thumbW, pos.y + thumbH), IM_COL32(15, 15, 15, 255));
 
-            // Draw thumbnail
-            const auto &frame = app.canvas.frames[f];
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
+                if (f == app.canvas.currentFrame)
+                    draw->AddRect(ImVec2(pos.x - 2, pos.y - 2),
+                        ImVec2(pos.x + thumbW + 2, pos.y + thumbH + 2),
+                        IM_COL32(255, 200, 0, 255), 0, 0, 2.0f);
+
+                // Loop point marker (cyan, pointing up); shifted left when the
+                // loop-end marker shares the frame.
+                if (f == app.canvas.loopFrame)
                 {
-                    if (app.canvas.IsGutter(x, y)) continue;
-                    Color c = frame.GetPixel(x, y, w);
-                    if (c.IsBlack()) continue;
-                    ImVec2 tl(pos.x + x * thumbScale, pos.y + y * thumbScale);
-                    ImVec2 br(tl.x + thumbScale, tl.y + thumbScale);
-                    draw->AddRectFilled(tl, br, IM_COL32(c.r, c.g, c.b, 255));
+                    float cx = pos.x + thumbW * 0.5f - (f == app.canvas.loopEndFrame ? 7.0f : 0.0f);
+                    float ty = pos.y + thumbH + 2;
+                    draw->AddTriangleFilled(
+                        ImVec2(cx - 5, ty + 8),
+                        ImVec2(cx + 5, ty + 8),
+                        ImVec2(cx, ty),
+                        IM_COL32(0, 200, 255, 220));
+                }
+
+                // Loop-end marker (orange, pointing down): later frames are the outro.
+                if (f == app.canvas.loopEndFrame)
+                {
+                    float cx = pos.x + thumbW * 0.5f + (f == app.canvas.loopFrame ? 7.0f : 0.0f);
+                    float ty = pos.y + thumbH + 2;
+                    draw->AddTriangleFilled(
+                        ImVec2(cx - 5, ty),
+                        ImVec2(cx + 5, ty),
+                        ImVec2(cx, ty + 8),
+                        IM_COL32(255, 160, 0, 220));
+                }
+
+                // Draw thumbnail
+                const auto &frame = app.canvas.frames[f];
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        if (app.canvas.IsGutter(x, y)) continue;
+                        Color c = frame.GetPixel(x, y, w);
+                        if (c.IsBlack()) continue;
+                        ImVec2 tl(pos.x + x * thumbScale, pos.y + y * thumbScale);
+                        ImVec2 br(tl.x + thumbScale, tl.y + thumbScale);
+                        draw->AddRectFilled(tl, br, IM_COL32(c.r, c.g, c.b, 255));
+                    }
                 }
             }
 
-            // Clickable area
+            // Always create the button: it establishes the cursor advance that
+            // drives the scroll-content width, and handles clicks on any frame.
             if (ImGui::InvisibleButton("##thumb", ImVec2(thumbW, thumbH)))
                 app.canvas.currentFrame = f;
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -384,6 +398,30 @@ void RenderTimeline(AppState &app)
                     app.canvas.DeleteFrame(f);
                     app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame");
                 }
+                if (ImGui::MenuItem("Delete All Left", nullptr, false, f > 0))
+                {
+                    // Adjust loop markers before erasing so indices stay valid.
+                    app.canvas.loopFrame = (app.canvas.loopFrame < f) ? 0 : app.canvas.loopFrame - f;
+                    if (app.canvas.loopEndFrame >= 0)
+                        app.canvas.loopEndFrame = (app.canvas.loopEndFrame < f) ? -1 : app.canvas.loopEndFrame - f;
+                    app.canvas.frames.erase(app.canvas.frames.begin(), app.canvas.frames.begin() + f);
+                    app.canvas.currentFrame = 0;
+                    app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete All Left");
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Delete all frames before this one");
+                if (ImGui::MenuItem("Delete All Right", nullptr, false, f < totalFrames - 1))
+                {
+                    app.canvas.frames.erase(app.canvas.frames.begin() + f + 1, app.canvas.frames.end());
+                    if (app.canvas.loopFrame > f)
+                        app.canvas.loopFrame = 0;
+                    if (app.canvas.loopEndFrame > f)
+                        app.canvas.loopEndFrame = -1;
+                    // currentFrame stays at f, which is now the last frame.
+                    app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete All Right");
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Delete all frames after this one");
                 ImGui::Separator();
                 if (app.canvas.loopFrame == f)
                 {
