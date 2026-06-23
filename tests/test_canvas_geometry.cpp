@@ -152,6 +152,62 @@ TEST_CASE("AdjustColorHsv shifts hue and applies gain/bias to saturation/value")
     CHECK(black.IsBlack());
 }
 
+TEST_CASE("ConvertMode preserves the outer ring and remaps geometry")
+{
+    // Build a full-pad Modern canvas with two frames and paint a known color on
+    // an outer-ring LED and an inner-ring LED of panel 0.
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    c.AddFrame(); // 2 frames
+    c.loopFrame = 1;
+    int mw = c.Width();
+    const Color outer{10, 20, 30}; // panel 0 outer cell (dx=1,dy=1) -> (2,2)
+    const Color inner{40, 50, 60}; // panel 0 inner cell -> (1,1), dropped on convert
+    REQUIRE(c.IsLedPosition(2, 2));
+    REQUIRE(c.IsLedPosition(1, 1));
+    for (auto &f : c.frames)
+    {
+        f.SetPixel(2, 2, mw, outer);
+        f.SetPixel(1, 1, mw, inner);
+    }
+
+    // Modern -> Legacy: geometry shrinks, inner ring is dropped, outer survives.
+    c.ConvertMode(CanvasMode::Legacy);
+    CHECK(c.mode == CanvasMode::Legacy);
+    CHECK(c.Width() == 14);
+    CHECK(c.Height() == 15);
+    CHECK((int)c.frames.size() == 2);
+    CHECK(c.loopFrame == 1);
+    int lw = c.Width();
+    // Modern (2,2) outer cell maps to Legacy (1,1).
+    for (const auto &f : c.frames)
+        CHECK(f.GetPixel(1, 1, lw) == outer);
+
+    // Modern -> Legacy must force Host target (Legacy can't upload to firmware).
+    Canvas fw;
+    fw.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Firmware);
+    fw.ConvertMode(CanvasMode::Legacy);
+    CHECK(fw.target == CanvasTarget::Host);
+
+    // Legacy -> Modern: outer ring restored at even coords, inner ring is blank.
+    c.ConvertMode(CanvasMode::Modern);
+    CHECK(c.mode == CanvasMode::Modern);
+    CHECK(c.Width() == 23);
+    int mw2 = c.Width();
+    for (const auto &f : c.frames)
+    {
+        CHECK(f.GetPixel(2, 2, mw2) == outer); // outer ring round-trips
+        CHECK(f.GetPixel(1, 1, mw2).IsBlack()); // inner ring blank, not restored
+    }
+
+    // Converting to the current mode is a no-op.
+    Canvas same;
+    same.Init(CanvasMode::Modern, CanvasExtent::SinglePanel, CanvasTarget::Host);
+    same.ConvertMode(CanvasMode::Modern);
+    CHECK(same.Width() == 7);
+    CHECK((int)same.frames.size() == 1);
+}
+
 TEST_CASE("ClearPanelAllFrames clears one panel across every frame")
 {
     Canvas c;

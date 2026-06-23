@@ -200,6 +200,58 @@ void Canvas::ClearAll()
         ClearPanel(p);
 }
 
+// Global position of the outer-ring LED at panel-local grid cell (dx, dy), with
+// dx, dy in 0..3. The outer 4x4 ring is the only LED set the two modes share:
+// Modern spaces it on even coords within an 8px panel, Legacy fills a 4px panel.
+// col/row are 0 for a single-panel canvas.
+static void OuterLedXY(CanvasMode mode, int col, int row, int dx, int dy, int &x, int &y)
+{
+    if (mode == CanvasMode::Modern)
+    {
+        x = col * 8 + dx * 2;
+        y = row * 8 + dy * 2;
+    }
+    else
+    {
+        x = col * 5 + dx;
+        y = row * 5 + dy;
+    }
+}
+
+void Canvas::ConvertMode(CanvasMode newMode)
+{
+    if (newMode == mode) return;
+
+    CanvasMode oldMode = mode;
+    int oldW = Width();
+    mode = newMode; // Width()/Height() now report the new geometry.
+    int newW = Width(), newH = Height();
+    int panels = PanelCount();
+
+    for (auto &frame : frames)
+    {
+        std::vector<Color> dst(newW * newH, Color{0, 0, 0});
+        for (int p = 0; p < panels; p++)
+        {
+            int col = (extent == CanvasExtent::FullPad) ? p % 3 : 0;
+            int row = (extent == CanvasExtent::FullPad) ? p / 3 : 0;
+            for (int dy = 0; dy < 4; dy++)
+                for (int dx = 0; dx < 4; dx++)
+                {
+                    int sx, sy, tx, ty;
+                    OuterLedXY(oldMode, col, row, dx, dy, sx, sy);
+                    OuterLedXY(newMode, col, row, dx, dy, tx, ty);
+                    dst[ty * newW + tx] = frame.pixels[sy * oldW + sx];
+                }
+        }
+        frame.pixels = std::move(dst);
+    }
+
+    // Firmware upload requires a Modern canvas; a Legacy canvas can only be Host.
+    if (newMode == CanvasMode::Legacy)
+        target = CanvasTarget::Host;
+}
+
 Color AdjustColorHsv(Color in, const HsvAdjust &adj)
 {
     float r = in.r / 255.0f, g = in.g / 255.0f, b = in.b / 255.0f;

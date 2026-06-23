@@ -117,6 +117,14 @@ struct Canvas
 
     // Quantize a panel's colors to at most maxColors across all frames.
     void QuantizePanel(int panel, int maxColors = 15);
+
+    // Convert the canvas between LED densities, preserving every frame's outer
+    // 4x4 ring (the 16 LEDs both modes share), durations, and loop markers.
+    // Modern->Legacy drops the inner 3x3 ring; Legacy->Modern leaves it blank.
+    // A no-op when newMode already matches. Legacy can never be a firmware
+    // target (firmware upload requires Modern), so converting to Legacy forces
+    // the target to Host.
+    void ConvertMode(CanvasMode newMode);
 };
 
 // An HSV recolor: rotate hue, then apply gain (multiply) and bias (add) to

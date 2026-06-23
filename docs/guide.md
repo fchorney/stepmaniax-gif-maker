@@ -138,6 +138,15 @@ The gain+bias model allows dim or near-black pixels to reach full range: use a h
 - Changes are previewed live on the canvas as you drag the sliders.
 - Click **Apply** to commit (creates an undo entry) or **Cancel** to discard.
 
+### Convert Mode
+
+Found under **Edit → Convert to Legacy / Convert to Modern**. Converts the open canvas between the two LED densities in place, keeping every frame, its duration, and the loop markers.
+
+- **Modern → Legacy** drops each panel's inner 3×3 ring and keeps the outer 4×4 (16 LEDs/panel). Because Legacy cannot be uploaded to firmware, the target is switched to Host.
+- **Legacy → Modern** keeps the outer 4×4 and adds a blank inner 3×3 ring (25 LEDs/panel). Fill in the inner LEDs afterward if you want them lit.
+
+The outer ring round-trips exactly. The inner ring is not recovered once dropped, so converting Modern → Legacy → Modern leaves the inner LEDs blank. The menu label reflects the conversion available for the current mode, and the change can be undone.
+
 ### Canvas Target
 
 Found under **Edit → Canvas Target**. Switches an open canvas between Firmware and Host target modes. See [Canvas Target](#canvas-target) above.
