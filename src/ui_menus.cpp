@@ -3,6 +3,7 @@
 #include "gif_export.h"
 #include "gif_import.h"
 #include "imgui_internal.h" // g.NavCursorVisible for the modal Enter-confirm fallback
+#include "build_info.h"
 #include <SMX.h>
 #include <cstdio>
 #include <algorithm>
@@ -487,6 +488,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     }
                     if (ok)
                     {
+                        // Stop any pad preview and hand the lights back, so
+                        // the pad plays the uploaded animation as soon as the
+                        // transfer lands and it can be verified immediately.
+                        if (app.livePreview || app.compositePreview)
+                        {
+                            app.livePreview = false;
+                            app.compositePreview = false;
+                            SMX_ReenableAutoLights();
+                        }
                         app.uploadInProgress = true;
                         app.uploadPad0Active = pad0;
                         app.uploadPad1Active = pad1;
@@ -1359,6 +1369,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         ImGui::Text("StepManiaX GIF Maker");
         ImGui::Text("Version %s", SMX_GIF_MAKER_VERSION);
+        ImGui::TextDisabled("Build: %s", SMX_GIF_MAKER_BUILD);
         ImGui::Separator();
         ImGui::Text("Created by Fernando Chorney");
         ImGui::Spacing();
