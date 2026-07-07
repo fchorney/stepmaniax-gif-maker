@@ -106,6 +106,15 @@ set(HIDAPI_INCLUDE_WRAPPER "${CMAKE_CURRENT_BINARY_DIR}/hidapi-include")
 file(MAKE_DIRECTORY "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
 file(GLOB HIDAPI_HEADERS "${hidapi_SOURCE_DIR}/hidapi/*.h")
 file(COPY ${HIDAPI_HEADERS} DESTINATION "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
+# The platform backend headers live next to their backends in the source tree,
+# but an installed hidapi puts them all in one include/hidapi/ directory, and
+# SDK >= 1.4.0 includes <hidapi/hidapi_darwin.h> on macOS. Mirror that layout.
+file(GLOB HIDAPI_PLATFORM_HEADERS
+    "${hidapi_SOURCE_DIR}/mac/hidapi_darwin.h"
+    "${hidapi_SOURCE_DIR}/windows/hidapi_winapi.h"
+    "${hidapi_SOURCE_DIR}/linux/hidapi_hidraw.h"
+    "${hidapi_SOURCE_DIR}/libusb/hidapi_libusb.h")
+file(COPY ${HIDAPI_PLATFORM_HEADERS} DESTINATION "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
 set(HIDAPI_INCLUDE_DIRS "${HIDAPI_INCLUDE_WRAPPER}")
 set(HIDAPI_LIBRARY_DIRS "")
 # Skip pkg-config search in the SDK (HIDAPI_FOUND is already set)
