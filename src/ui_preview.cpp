@@ -231,6 +231,7 @@ void RenderPreview(AppState &app)
             {
                 app.undo.GoTo(i, app.canvas);
                 app.ClearFrameSelection();
+                app.dirty = app.undo.HasUnsavedChanges();
                 app.colorCountsDirty = true;
             }
 

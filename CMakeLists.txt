@@ -166,9 +166,11 @@ if(GIFMAKER_BUILD_TESTS)
         tests/test_main.cpp
         tests/test_canvas_geometry.cpp
         tests/test_gif_roundtrip.cpp
+        tests/test_undo.cpp
         src/canvas.cpp
         src/gif_export.cpp
         src/gif_import.cpp
+        src/undo.cpp
     )
     target_include_directories(gifmaker_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(gifmaker_tests PRIVATE doctest_header)

@@ -25,7 +25,7 @@ std::string g_compositeRelPath;
 std::string g_compositePrsPath;
 bool g_compositeRelRequested = false;
 bool g_compositePrsRequested = false;
-std::atomic<int> g_uploadProgress{0};
+std::atomic<int> g_uploadProgress[2] = {0, 0};
 
 // --- Logging ---
 static FILE *g_logFile = nullptr;

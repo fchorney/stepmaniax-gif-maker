@@ -76,7 +76,13 @@ void FrameCallback(void *data, struct GIF_WHDR *whdr)
             int palIdx = whdr->bptr[srcY * frxd + x];
             if (palIdx == whdr->tran) continue;
 
-            int dstIdx = ((fryo + y) * state->width + (frxo + x)) * 4;
+            // A corrupt file can carry a frame rect outside the screen or
+            // palette indices past the palette; skip rather than write wild.
+            int dstX = frxo + x, dstY = fryo + y;
+            if (palIdx >= whdr->clrs) continue;
+            if (dstX < 0 || dstX >= state->width || dstY < 0 || dstY >= state->height) continue;
+
+            int dstIdx = (dstY * state->width + dstX) * 4;
             state->canvas[dstIdx + 0] = whdr->cpal[palIdx].R;
             state->canvas[dstIdx + 1] = whdr->cpal[palIdx].G;
             state->canvas[dstIdx + 2] = whdr->cpal[palIdx].B;
@@ -114,7 +120,9 @@ void FrameCallback(void *data, struct GIF_WHDR *whdr)
         for (int y = 0; y < fryd; y++)
             for (int x = 0; x < frxd; x++)
             {
-                int idx = ((fryo + y) * state->width + (frxo + x)) * 4;
+                int dstX = frxo + x, dstY = fryo + y;
+                if (dstX < 0 || dstX >= state->width || dstY < 0 || dstY >= state->height) continue;
+                int idx = (dstY * state->width + dstX) * 4;
                 state->canvas[idx + 0] = 0;
                 state->canvas[idx + 1] = 0;
                 state->canvas[idx + 2] = 0;

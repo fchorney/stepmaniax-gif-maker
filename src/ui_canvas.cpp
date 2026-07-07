@@ -252,7 +252,9 @@ void RenderCanvas(AppState &app)
                 // Tool actions on click/drag
                 if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && canvasActive)
                 {
-                    if (!app.strokeActive)
+                    // Picking a color changes nothing: no stroke, so no dirty
+                    // flag or undo entry on release.
+                    if (!app.strokeActive && app.tool != Tool_Pick)
                         app.strokeActive = true;
 
                     auto &editFrame = app.canvas.CurrentFrame();

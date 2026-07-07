@@ -67,6 +67,8 @@ struct AppState
 
     // Firmware upload
     bool uploadInProgress = false;
+    bool uploadPad0Active = false;
+    bool uploadPad1Active = false;
     int uploadProgress = 0;
     bool showUploadDialog = false;
     std::string uploadError;
@@ -161,4 +163,4 @@ extern std::string g_compositeRelPath;
 extern std::string g_compositePrsPath;
 extern bool g_compositeRelRequested;
 extern bool g_compositePrsRequested;
-extern std::atomic<int> g_uploadProgress;
+extern std::atomic<int> g_uploadProgress[2]; // per-pad upload progress
