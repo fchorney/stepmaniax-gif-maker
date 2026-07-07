@@ -56,7 +56,15 @@ static void CompositePrsCallback(void *userdata, const char * const *filelist, i
 static bool ModalDefaultConfirm()
 {
     ImGuiContext &g = *ImGui::GetCurrentContext();
-    if (g.NavCursorVisible || ImGui::GetIO().WantTextInput)
+    if (ImGui::GetIO().WantTextInput)
+        return false;
+    // Stand down only when ImGui's own navigation will handle the activation,
+    // which requires BOTH a focused item and a visible nav cursor (the exact
+    // precondition of its activation path). Anything less (e.g. the cursor
+    // flagged visible with no item focused, which happens a few frames after
+    // a modal takes focus) would swallow the key with no visible effect.
+    if (g.NavId != 0 && g.NavCursorVisible && g.NavWindow
+        && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs))
         return false;
     return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
            || ImGui::IsKeyPressed(ImGuiKey_Space, false);
