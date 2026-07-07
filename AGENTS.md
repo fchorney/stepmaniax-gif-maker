@@ -41,7 +41,7 @@
 │   ├── ui_preview.h/cpp      # LED preview panel and undo history panel
 │   ├── default_layout.h      # Default ImGui window layout (embedded ini)
 │   └── vendor/
-│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v1.1.3)
+│       └── stepmaniax-sdk-mp/ # SDK submodule (pinned to v2.0.0)
 └── build/
 ```
 
