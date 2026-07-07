@@ -2,6 +2,7 @@
 #include "ui_menus.h"
 #include "gif_export.h"
 #include "gif_import.h"
+#include "imgui_internal.h" // g.NavCursorVisible for the modal Enter-confirm fallback
 #include <SMX.h>
 #include <cstdio>
 #include <algorithm>
@@ -15,6 +16,7 @@ using namespace std;
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_exportPath = filelist[0];
@@ -25,6 +27,7 @@ static void ExportDialogCallback(void *userdata, const char * const *filelist, i
 static void ImportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_importPath = filelist[0];
@@ -35,6 +38,7 @@ static void ImportDialogCallback(void *userdata, const char * const *filelist, i
 static void CompositeRelCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositeRelPath = filelist[0]; g_compositeRelRequested = true; }
 }
@@ -42,8 +46,56 @@ static void CompositeRelCallback(void *userdata, const char * const *filelist, i
 static void CompositePrsCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositePrsPath = filelist[0]; g_compositePrsRequested = true; }
+}
+
+// Enter (or keypad Enter) confirms a modal's default action, but only while
+// the nav cursor is hidden: once arrow keys move the visible focus to some
+// button, Enter and Space go to that button through ImGui's own navigation.
+// (ImGui hides the nav cursor again on any mouse click, so a mouse-opened
+// dialog otherwise ignores Enter entirely.)
+// True while ImGui's own keyboard navigation owns Enter/Space activation,
+// which requires BOTH a focused item and a visible nav cursor (the exact
+// precondition of its activation path). Anything less (e.g. the cursor
+// flagged visible with no item focused, which happens a few frames after a
+// modal takes focus) means nobody would handle the key.
+static bool NavOwnsActivation()
+{
+    ImGuiContext &g = *ImGui::GetCurrentContext();
+    return g.NavId != 0 && g.NavCursorVisible && g.NavWindow
+           && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs);
+}
+
+static bool ModalDefaultConfirm()
+{
+    if (ImGui::GetIO().WantTextInput || NavOwnsActivation())
+        return false;
+    return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
+           || ImGui::IsKeyPressed(ImGuiKey_Space, false);
+}
+
+// Outline the last item (a modal's default button) in the nav-highlight
+// colour while Enter/Space would press it via ModalDefaultConfirm. Hidden as
+// soon as arrow keys move ImGui's own visible focus, which then owns the keys
+// and draws its own highlight.
+static void ModalDefaultHint()
+{
+    if (NavOwnsActivation())
+        return;
+    ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    ImGui::GetWindowDrawList()->AddRect(
+        ImVec2(mn.x - 3.0f, mn.y - 3.0f), ImVec2(mx.x + 3.0f, mx.y + 3.0f),
+        ImGui::GetColorU32(ImGuiCol_NavCursor), ImGui::GetStyle().FrameRounding + 2.0f, 0, 2.0f);
+}
+
+// Escape cancels/dismisses a modal. ImGui itself deliberately never closes
+// modal popups on Escape, so each dialog wires this into its cancel action.
+// Skipped while a text field is active: Escape then reverts the field's edit.
+static bool ModalCancelPressed()
+{
+    return !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
 }
 
 static void UploadProgressCb(int progress, void *pUser)
@@ -529,6 +581,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::Text("Keybindings");
         ImGui::Separator();
 
+        // Whether a key capture was armed at the top of the frame: a key that
+        // completes or cancels the capture (inside KeybindRow, which renders
+        // before the Close button) must not also confirm/close the dialog.
+        bool captureWasArmed = (rebindTarget != nullptr);
+
         auto KeybindRow = [&](const char *label, int *key) {
             ImGui::Text("%s:", label);
             ImGui::SameLine(120);
@@ -608,11 +665,13 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         ImGui::Separator();
         ImGui::SameLine();
-        if (ImGui::Button("Close"))
+        if (ImGui::Button("Close") || (!captureWasArmed && rebindTarget == nullptr && (ModalDefaultConfirm() || ModalCancelPressed())))
         {
             rebindTarget = nullptr;
             ImGui::CloseCurrentPopup();
         }
+        if (rebindTarget == nullptr)
+            ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -721,7 +780,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::Separator();
         bool noPanels = (hsvMask == 0);
         if (noPanels) ImGui::BeginDisabled();
-        if (ImGui::Button("Apply"))
+        if (ImGui::Button("Apply") || (!noPanels && ModalDefaultConfirm()))
         {
             bool allPanels = (app.canvas.PanelCount() == 1) || hsvMask == 0x1FF;
             app.dirty = true;
@@ -737,8 +796,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         if (noPanels) ImGui::EndDisabled();
+        if (!noPanels)
+            ModalDefaultHint();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
         {
             app.canvas.frames = hsvSnapshot;
             app.colorCountsDirty = true;
@@ -746,6 +807,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+    }
+    else if (hsvInit)
+    {
+        // Dismissed without Apply or Cancel (e.g. Escape): revert the live
+        // preview exactly like Cancel, or it stays baked into the canvas
+        // without an undo entry.
+        app.canvas.frames = hsvSnapshot;
+        app.colorCountsDirty = true;
+        hsvInit = false;
     }
 
     // --- GIF Export handling ---
@@ -784,7 +854,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
         ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
         for (int p = 0; p < 9; p++)
@@ -813,9 +882,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -826,14 +896,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (exportSuccess)
             ImGui::Text("GIF saved successfully!");
         else
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Save failed: %s", exportError.c_str());
-        if (ImGui::Button("OK"))
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -845,7 +915,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("You have unsaved changes. Discard them?");
         ImGui::Separator();
         if (ImGui::Button("Discard"))
@@ -866,12 +935,13 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.running = false;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
         {
             app.pendingAction = Pending_None;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -914,11 +984,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Import Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Import failed: %s", importError.c_str());
-        if (ImGui::Button("OK"))
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -930,7 +1000,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Composite Preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
 
         ImGui::Text("Released Animation:");
         ImGui::SameLine();
@@ -1007,7 +1076,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::TextColored(ImVec4(0, 1, 0, 1), "Playing...");
         }
         ImGui::SameLine();
-        if (ImGui::Button("Close", ImVec2(80, 0)))
+        if (ImGui::Button("Close", ImVec2(80, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             if (app.compositePreview)
             {
@@ -1016,6 +1085,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -1034,29 +1104,20 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Upload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (!app.uploadError.empty())
         {
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Upload failed: %s", app.uploadError.c_str());
-            if (ImGui::Button("OK"))
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
+            ModalDefaultHint();
         }
         else if (app.uploadProgress >= 100)
         {
-            static bool uploadFocusSet = false;
             ImGui::Text("Upload complete!");
-            if (ImGui::Button("OK"))
-            {
-                uploadFocusSet = false;
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
-            }
-            if (!uploadFocusSet)
-            {
-                ImGui::SetKeyboardFocusHere(-1);
-                ImGui::SetNavCursorVisible(true);
-                uploadFocusSet = true;
-            }
+            ModalDefaultHint();
         }
         else
         {
@@ -1074,7 +1135,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("New Animation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("Create a new animation. This will discard current work.");
         ImGui::Separator();
         static int newMode = 1;   // 0 = Legacy, 1 = Modern
@@ -1099,7 +1159,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (!firmwareAllowed)
             ImGui::TextDisabled("Only a Modern full pad can upload to firmware.");
         ImGui::Separator();
-        if (ImGui::Button("Create"))
+        if (ImGui::Button("Create") || ModalDefaultConfirm())
         {
             CanvasMode newCanvasMode = newMode == 1 ? CanvasMode::Modern : CanvasMode::Legacy;
             CanvasExtent newCanvasExtent = newExtent == 1 ? CanvasExtent::SinglePanel : CanvasExtent::FullPad;
@@ -1117,10 +1177,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.undo.SaveState(app.canvas, "Initial");
             ImGui::CloseCurrentPopup();
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
-            ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
@@ -1263,11 +1324,12 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::TextLink("github.com/fchorney/stepmaniax-gif-maker"))
             SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker");
         ImGui::Spacing();
-        if (ImGui::Button("Close", ImVec2(120, 0)))
+        if (ImGui::Button("Close", ImVec2(120, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             showAbout = false;
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 }

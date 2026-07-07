@@ -26,6 +26,7 @@ std::string g_compositePrsPath;
 bool g_compositeRelRequested = false;
 bool g_compositePrsRequested = false;
 std::atomic<int> g_uploadProgress{0};
+std::atomic<bool> g_fileDialogClosed{false};
 
 // --- Logging ---
 static FILE *g_logFile = nullptr;
@@ -92,7 +93,8 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // NavEnableKeyboard is toggled per-frame in the main loop: dialogs and
+    // menus get keyboard navigation, the main UI does not.
 
     // Set up config directory for imgui.ini
     if (!configDir.empty())
@@ -157,6 +159,21 @@ int main(int, char**)
                     app.running = false;
             }
         }
+
+        // A closing native file dialog can leave the window without key
+        // focus (seen on macOS), silently eating all keyboard input until
+        // the user clicks the window; take the focus back.
+        if (g_fileDialogClosed.exchange(false))
+            SDL_RaiseWindow(window);
+
+        // Keyboard nav is for dialogs and menus only. With it always on,
+        // arrow keys move an (often invisible) focus around the main UI and
+        // Space/Enter then activate that widget instead of running their
+        // timeline shortcuts.
+        if (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        else
+            io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
