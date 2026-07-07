@@ -164,3 +164,6 @@ extern std::string g_compositePrsPath;
 extern bool g_compositeRelRequested;
 extern bool g_compositePrsRequested;
 extern std::atomic<int> g_uploadProgress[2]; // per-pad upload progress
+// Set by every file-dialog callback (picked or cancelled): the native dialog
+// can leave the window without key focus on close, so the main loop raises it.
+extern std::atomic<bool> g_fileDialogClosed;
