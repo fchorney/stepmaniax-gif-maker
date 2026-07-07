@@ -57,21 +57,38 @@ static void CompositePrsCallback(void *userdata, const char * const *filelist, i
 // button, Enter and Space go to that button through ImGui's own navigation.
 // (ImGui hides the nav cursor again on any mouse click, so a mouse-opened
 // dialog otherwise ignores Enter entirely.)
-static bool ModalDefaultConfirm()
+// True while ImGui's own keyboard navigation owns Enter/Space activation,
+// which requires BOTH a focused item and a visible nav cursor (the exact
+// precondition of its activation path). Anything less (e.g. the cursor
+// flagged visible with no item focused, which happens a few frames after a
+// modal takes focus) means nobody would handle the key.
+static bool NavOwnsActivation()
 {
     ImGuiContext &g = *ImGui::GetCurrentContext();
-    if (ImGui::GetIO().WantTextInput)
-        return false;
-    // Stand down only when ImGui's own navigation will handle the activation,
-    // which requires BOTH a focused item and a visible nav cursor (the exact
-    // precondition of its activation path). Anything less (e.g. the cursor
-    // flagged visible with no item focused, which happens a few frames after
-    // a modal takes focus) would swallow the key with no visible effect.
-    if (g.NavId != 0 && g.NavCursorVisible && g.NavWindow
-        && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs))
+    return g.NavId != 0 && g.NavCursorVisible && g.NavWindow
+           && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs);
+}
+
+static bool ModalDefaultConfirm()
+{
+    if (ImGui::GetIO().WantTextInput || NavOwnsActivation())
         return false;
     return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
            || ImGui::IsKeyPressed(ImGuiKey_Space, false);
+}
+
+// Outline the last item (a modal's default button) in the nav-highlight
+// colour while Enter/Space would press it via ModalDefaultConfirm. Hidden as
+// soon as arrow keys move ImGui's own visible focus, which then owns the keys
+// and draws its own highlight.
+static void ModalDefaultHint()
+{
+    if (NavOwnsActivation())
+        return;
+    ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    ImGui::GetWindowDrawList()->AddRect(
+        ImVec2(mn.x - 3.0f, mn.y - 3.0f), ImVec2(mx.x + 3.0f, mx.y + 3.0f),
+        ImGui::GetColorU32(ImGuiCol_NavCursor), ImGui::GetStyle().FrameRounding + 2.0f, 0, 2.0f);
 }
 
 // Escape cancels/dismisses a modal. ImGui itself deliberately never closes
@@ -705,6 +722,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
             rebindTarget = nullptr;
             ImGui::CloseCurrentPopup();
         }
+        if (rebindTarget == nullptr)
+            ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -829,6 +848,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         if (noPanels) ImGui::EndDisabled();
+        if (!noPanels)
+            ModalDefaultHint();
         ImGui::SameLine();
         if (ImGui::Button("Cancel") || ModalCancelPressed())
         {
@@ -912,6 +933,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -929,6 +951,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -966,6 +989,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -1012,6 +1036,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -1132,6 +1157,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -1160,12 +1186,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
+            ModalDefaultHint();
         }
         else if (app.uploadProgress >= 100)
         {
             ImGui::Text("Upload complete!");
             if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
+            ModalDefaultHint();
         }
         else
         {
@@ -1226,6 +1254,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::SameLine();
         if (ImGui::Button("Cancel") || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
@@ -1407,6 +1436,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             showAbout = false;
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 }
