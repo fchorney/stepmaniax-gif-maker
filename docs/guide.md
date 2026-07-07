@@ -184,7 +184,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - **Duplicate Frame** - copy the current frame
 - **Delete Frame** - remove the current frame
 - **Delete All Left / Delete All Right** - right-click a frame to remove every frame before or after it; the loop markers are adjusted to stay valid
-- **Reorder** - drag frames or use Shift Left/Right shortcuts
+- **Reorder** - Shift Left/Right buttons (or the ,/. keys); a multi-selection moves as a block, keeping its relative order
 
 ### Multi-Frame Selection
 
@@ -228,6 +228,8 @@ When the canvas target is **Host**, right-clicking a frame also exposes a **Set 
 3. **Outro** - frames after the loop-end frame; plays once on release
 
 The loop-end frame is shown with an orange downward-pointing marker in the timeline. Right-click the same frame again to clear it.
+
+Without a loop-end marker, the Hold button appears disabled on Host-target canvases (hover it for an explanation), and pressing the Hold Sim key shows a short hint in the timeline.
 
 This is a [deadsync](https://github.com/pnn64/deadsync) extension for per-panel judgement GIFs. SMX firmware and the official SDK ignore the loop-end marker.
 
@@ -326,7 +328,7 @@ Plays the animation on the pad independently with proper frame timing, regardles
 
 ## Composite Preview
 
-Load both a **released** and **pressed** animation to preview how they overlay based on live pad input.
+Load both a **released** and **pressed** animation to preview how they overlay based on live pad input. Both must be full-pad GIFs sharing the same Modern/Legacy mode; mismatches and load failures are reported in the dialog.
 
 ![Composite Preview](screenshots/composite-preview.png)
 
@@ -365,6 +367,8 @@ Write animations permanently to pad EEPROM for offline playback (no computer nee
 3. Select animation type: Released or Pressed
 4. Select target: Pad 1, Pad 2, or Both
 5. Click Upload and wait for completion
+
+Starting an upload stops any running pad preview and re-enables auto lights, so the pad plays the uploaded animation as soon as the transfer finishes.
 
 ### Fill Black Option
 

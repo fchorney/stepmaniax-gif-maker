@@ -51,9 +51,22 @@
 - [x] Fill black pixels option for pressed uploads (makes overlay fully opaque)
 - [x] Composite preview (load released + pressed, overlay based on pad input, fill black option)
 
+- [x] Loop markers track their frame images across add/dup/paste/delete/reorder
+- [x] Timeline follow (auto-scroll to the current frame during playback and scrubbing)
+- [x] Multi-frame selection (click / shift+click / ctrl+click) with selection-wide edits
+- [x] Panel-scoped HSV adjust (3x3 panel picker + per-panel right-click entry)
+- [x] Multi-frame copy/paste, select-all (Ctrl+A) / clear (Esc), block reorder, reverse frames (R), select loop region
+- [x] Keyboard nav scoped to dialogs/menus; Enter/Space confirm the outlined default, Esc cancels
+- [x] Window key focus reclaimed after native file dialogs
+- [x] Review fixes: preview OOB clamps, undo target/saved-point tracking, save-failure reporting, rebind capture hardening, per-pad upload progress, composite validation, prefs clamping, importer bounds
+- [x] Upload stops pad previews so the pad plays the uploaded animation immediately
+- [x] About dialog shows the build identifier (git branch @ hash)
+- [x] SDK updated to stepmaniax-sdk-mp v2.0.0 (interrupt reads, split HID handles)
+
 ## Shelved (revisit if needed)
 - .smxgifs project files
 - Multi-pad editing (pads are independent)
 - Drag-and-drop GIF import
+- Drag-to-reorder timeline frames (block Shift Left/Right covers reordering)
 - Custom theming (fonts, accent colors)
 - Dual-GIF editing UI (tabs for released/pressed)

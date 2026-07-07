@@ -38,6 +38,7 @@ We still need an icon for this app! I'm terrible at drawing/graphics related stu
 - **Animation timeline** - add/duplicate/delete frames (including delete-all-left/right), reorder, per-frame duration, loop point, optional loop-end marker with hold/release playback simulation
 - **Multi-frame selection** - shift-click / ctrl-click (cmd on macOS) frames on the timeline; delete, duplicate, re-time, clear panels, paste panels, or HSV-shift all selected frames at once; select-all, block copy/paste, block reorder, reverse, and select-loop-region round it out
 - **Preview speed control** - slow down or speed up timeline and hardware playback (0.05x - 4x) without changing saved frame timing
+- **Timeline follow** - the thumbnail strip auto-scrolls to keep the current frame visible during playback and scrubbing
 - **Canvas target** - Firmware mode (EEPROM upload, 32-frame/15-color caps) or Host mode (deadsync playback, uncapped, loop-end/outro authoring); switchable after creation
 - **Live hardware preview** - stream animations to connected pads in real-time (sync or play mode); works with single-panel canvases
 - **Firmware upload** - write released and pressed animations to pad EEPROM for offline playback
@@ -177,8 +178,10 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 | Quit | Ctrl+Q |
 | Undo | Ctrl+Z |
 | Redo | Ctrl+Y |
-| Copy Frame | Ctrl+C |
-| Paste Frame | Ctrl+V |
+| Copy Frame(s) | Ctrl+C |
+| Paste Frame(s) | Ctrl+V |
+| Select All Frames | Ctrl+A |
+| Clear Selection | Esc |
 | Draw | 1 |
 | Erase | 2 |
 | Fill | 3 |
@@ -192,9 +195,10 @@ The editor produces GIF files compatible with the [stepmaniax-sdk-mp](https://gi
 | Delete Frame | Delete |
 | Shift Frame | ,/. |
 | Hold Sim | H |
-| Adjust HSV | Ctrl+E | Fixed shortcut, not remappable |
+| Reverse Frames | R |
+| Adjust HSV | Ctrl+E |
 
-All tool and timeline shortcuts (except Ctrl+E) are remappable in **Edit → Settings**.
+All tool and timeline shortcuts are remappable in **Edit → Settings** (except Ctrl+E, Ctrl+A, and Esc). In dialogs, Enter or Space confirms the outlined default button and Esc cancels.
 
 On macOS, Ctrl shortcuts use Cmd instead.
 
@@ -261,6 +265,7 @@ Keep PRs focused on a single concern. If you're fixing a bug and also refactorin
 If you encounter a bug, please [open an issue](https://github.com/fchorney/stepmaniax-gif-maker/issues/new) with:
 
 - **OS and version** (e.g., Ubuntu 24.04, macOS 15.1, Windows 11)
+- **App version and build** - shown in **Help → About** (e.g., 0.3.0, main @ abc1234)
 - **Steps to reproduce** - what you did leading up to the bug
 - **Expected behavior** - what should have happened
 - **Actual behavior** - what happened instead
