@@ -330,6 +330,20 @@ void RenderTimeline(AppState &app)
                     shiftSelection(+1);
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !app.selectedFrames.empty())
                     app.ClearFrameSelection();
+                // Reverse the selected frames, or the whole animation without
+                // a multi-selection (mirrors the Edit menu item).
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.reverseFrames, false) && totalFrames > 1)
+                {
+                    bool revMulti = app.HasMultiSelection();
+                    std::vector<int> rev;
+                    if (revMulti)
+                        rev = app.SelectionOrCurrent();
+                    else
+                        for (int i = 0; i < totalFrames; i++) rev.push_back(i);
+                    app.canvas.ReverseFrames(rev);
+                    app.dirty = true; app.colorCountsDirty = true;
+                    app.undo.SaveState(app.canvas, revMulti ? "Reverse Frames (Selected)" : "Reverse Frames");
+                }
             }
             if ((io.KeyCtrl || io.KeySuper) && ImGui::IsKeyPressed(ImGuiKey_A, false))
             {
@@ -525,7 +539,7 @@ void RenderTimeline(AppState &app)
                     app.dirty = true; app.colorCountsDirty = true;
                     app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
                 }
-                if (ImGui::MenuItem("Reverse Selected Frames", nullptr, false, ctxMulti))
+                if (ImGui::MenuItem("Reverse Selected Frames", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.reverseFrames), false, ctxMulti))
                 {
                     app.canvas.ReverseFrames(app.SelectionOrCurrent());
                     app.dirty = true; app.colorCountsDirty = true;

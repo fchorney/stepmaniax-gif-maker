@@ -196,7 +196,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - With two or more frames selected, single-frame edits apply to every selected frame: Delete, Duplicate, frame duration, Clear Panel, Clear All Panels, Paste Panel, and Adjust HSV (via its "Selected frames" scope)
 - **Copy/Paste** works on the selection: copying grabs all selected frames in order, pasting inserts them as a block after the current (or right-clicked) frame and selects the block
 - **Shift Left/Right** moves the whole selection one step as a block, keeping relative order; frames against an edge stay put
-- **Reverse Frames** (Edit menu or frame right-click) reverses the selected frames, or the whole animation when nothing is multi-selected
+- **Reverse Frames** (Edit menu, frame right-click, or the R key) reverses the selected frames, or the whole animation when nothing is multi-selected
 - **Select Loop Region** (frame right-click) selects the frames from the loop point through the loop end (or the last frame)
 - Plain clicks, frame navigation, and structural edits (add, paste, reorder) collapse the selection
 
@@ -401,8 +401,10 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Quit | Ctrl+Q | |
 | Undo | Ctrl+Z | |
 | Redo | Ctrl+Y | |
-| Copy Frame | Ctrl+C | |
-| Paste Frame | Ctrl+V | |
+| Copy Frame(s) | Ctrl+C | Copies the multi-selection when one exists |
+| Paste Frame(s) | Ctrl+V | Pastes the copied block after the current frame |
+| Select All Frames | Ctrl+A | Fixed shortcut |
+| Clear Selection | Esc | Fixed shortcut |
 | Draw | 1 | Remappable |
 | Erase | 2 | Remappable |
 | Fill | 3 | Remappable |
@@ -416,6 +418,7 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Delete Frame | Delete | Remappable |
 | Shift Frame | ,/. | Remappable |
 | Hold Sim | H | Remappable; only active when a loop-end marker is set |
+| Reverse Frames | R | Remappable; selected frames, or all frames without a multi-selection |
 | Adjust HSV | Ctrl+E | Fixed shortcut |
 
 On macOS, Ctrl shortcuts use Cmd instead.

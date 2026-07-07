@@ -228,7 +228,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             // Reverse the selected frames, or the whole animation without a
             // multi-selection.
-            if (ImGui::MenuItem(multiSel ? "Reverse Frames (Selected)" : "Reverse Frames (All)", nullptr, false, multiSel || (int)app.canvas.frames.size() > 1))
+            if (ImGui::MenuItem(multiSel ? "Reverse Frames (Selected)" : "Reverse Frames (All)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.reverseFrames), false, multiSel || (int)app.canvas.frames.size() > 1))
             {
                 std::vector<int> rev;
                 if (multiSel)
@@ -579,6 +579,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Shift Left", &app.prefs.keys.shiftLeft);
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
         KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
+        KeybindRow("Reverse Frames", &app.prefs.keys.reverseFrames);
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
