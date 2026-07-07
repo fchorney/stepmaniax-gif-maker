@@ -174,7 +174,7 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine();
         if (ImGui::Button("<<") && app.canvas.currentFrame > 0)
         {
-            std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame - 1]);
+            app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame - 1);
             app.canvas.currentFrame--;
             app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
         }
@@ -182,7 +182,7 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine();
         if (ImGui::Button(">>") && app.canvas.currentFrame < totalFrames - 1)
         {
-            std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame + 1]);
+            app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame + 1);
             app.canvas.currentFrame++;
             app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
         }
@@ -240,13 +240,13 @@ void RenderTimeline(AppState &app)
                 { app.canvas.DeleteFrame(app.canvas.currentFrame); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Delete Frame"); }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftLeft) && app.canvas.currentFrame > 0)
             {
-                std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame - 1]);
+                app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame - 1);
                 app.canvas.currentFrame--;
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
             }
             if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftRight) && app.canvas.currentFrame < totalFrames - 1)
             {
-                std::swap(app.canvas.frames[app.canvas.currentFrame], app.canvas.frames[app.canvas.currentFrame + 1]);
+                app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame + 1);
                 app.canvas.currentFrame++;
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
             }
@@ -389,8 +389,7 @@ void RenderTimeline(AppState &app)
                 }
                 if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
                 {
-                    app.canvas.frames.insert(app.canvas.frames.begin() + f + 1, app.frameClipboard);
-                    app.canvas.currentFrame = f + 1;
+                    app.canvas.InsertFrame(f + 1, app.frameClipboard);
                     app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
                 }
                 if (ImGui::MenuItem("Delete Frame", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.deleteFrame), false, (int)app.canvas.frames.size() > 1))

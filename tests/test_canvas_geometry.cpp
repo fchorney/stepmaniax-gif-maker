@@ -236,3 +236,109 @@ TEST_CASE("ClearPanelAllFrames clears one panel across every frame")
         CHECK(f.GetPixel(16, 16, w) == red);
     }
 }
+
+// Build a Host canvas with `count` frames, each tagged by a unique duration so
+// tests can tell which frame image landed where after structural edits.
+static Canvas TaggedCanvas(int count)
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    while ((int)c.frames.size() < count) c.AddFrame();
+    for (int i = 0; i < count; i++)
+        c.frames[i].duration = 0.01f * (i + 1);
+    return c;
+}
+
+TEST_CASE("loop markers stay on the same frame image across inserts")
+{
+    // 4 frames: intro 0, loop 1..2, outro 3.
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+    c.loopEndFrame = 2;
+
+    // Insert before the loop region: both markers shift right.
+    c.currentFrame = 0;
+    c.AddFrame(); // blank inserted at index 1
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 3);
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+
+    // Insert inside the loop region: only the loop end shifts.
+    c.DuplicateFrame(2); // copy of the loop-start image at index 3
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 4);
+
+    // Insert after the loop region: no marker moves.
+    CanvasFrame tail = c.frames.back();
+    c.InsertFrame((int)c.frames.size(), tail);
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 4);
+    CHECK(c.currentFrame == (int)c.frames.size() - 1);
+}
+
+TEST_CASE("loop markers stay on the same frame image across deletes")
+{
+    // 5 frames: intro 0, loop 1..3, outro 4.
+    Canvas c = TaggedCanvas(5);
+    c.loopFrame = 1;
+    c.loopEndFrame = 3;
+
+    // Delete before the loop region: both markers shift left.
+    c.DeleteFrame(0);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 2);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+
+    // Delete inside the loop region: only the loop end shifts.
+    c.DeleteFrame(1);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 1);
+
+    // Delete the loop-end frame itself: the region shrinks to the previous frame.
+    c.DeleteFrame(1);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 0);
+
+    // Delete the frame holding both markers: the loop end clears, the loop
+    // start moves to the next frame (same index).
+    c.DeleteFrame(0);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == -1);
+}
+
+TEST_CASE("deleting the loop start keeps the marker on the next frame")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 2;
+    c.DeleteFrame(2);
+    CHECK(c.loopFrame == 2); // now the image that was frame 3
+    CHECK(c.frames[2].duration == doctest::Approx(0.04f));
+
+    // Deleting a loop start that is the last frame clamps it back into range.
+    c.loopFrame = 2;
+    c.DeleteFrame(2);
+    CHECK(c.loopFrame == 1);
+}
+
+TEST_CASE("swapping frames moves loop markers with their images")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+
+    // Shift the loop-start image right: the marker follows.
+    c.SwapFrames(1, 2);
+    CHECK(c.loopFrame == 2);
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+
+    // Swapping two unmarked frames leaves markers alone.
+    c.SwapFrames(0, 3);
+    CHECK(c.loopFrame == 2);
+
+    // Swapping loop start past loop end keeps the region spanning the same
+    // frames instead of inverting.
+    c.loopFrame = 1;
+    c.loopEndFrame = 2;
+    c.SwapFrames(1, 2);
+    CHECK(c.loopFrame == 1);
+    CHECK(c.loopEndFrame == 2);
+}

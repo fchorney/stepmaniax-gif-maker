@@ -82,9 +82,19 @@ struct Canvas
 
     void Init(CanvasMode m, CanvasExtent e = CanvasExtent::FullPad,
               CanvasTarget t = CanvasTarget::Firmware);
+
+    // Frame add/duplicate/delete/insert/swap keep the loop markers on the same
+    // frame image: markers shift with insertions and deletions before them and
+    // follow their frame through a swap, instead of staying at a fixed index.
     void AddFrame();
     void DuplicateFrame(int idx);
     void DeleteFrame(int idx);
+
+    // Insert a frame at idx (becomes the current frame).
+    void InsertFrame(int idx, const CanvasFrame &frame);
+
+    // Swap two frames, moving loop markers with their frame images.
+    void SwapFrames(int a, int b);
     CanvasFrame &CurrentFrame();
     const CanvasFrame &CurrentFrame() const;
 
