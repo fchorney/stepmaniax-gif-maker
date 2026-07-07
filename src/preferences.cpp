@@ -90,6 +90,14 @@ void Preferences::Load(const std::string &path)
     } catch (...) {
         // Ignore malformed config, use defaults
     }
+
+    // Sanity-clamp numeric values so a hand-edited or corrupted file can't
+    // produce a 0x0 window or an unusable zoom.
+    windowWidth = std::clamp(windowWidth, 640, 8192);
+    windowHeight = std::clamp(windowHeight, 480, 8192);
+    canvasZoom = std::clamp(canvasZoom, 8.0f, 80.0f);
+    previewZoom = std::clamp(previewZoom, 3.0f, 40.0f);
+    maxUndoHistory = std::clamp(maxUndoHistory, 10, 100000);
 }
 
 void Preferences::Save(const std::string &path) const

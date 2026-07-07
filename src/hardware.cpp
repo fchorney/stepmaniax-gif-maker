@@ -53,12 +53,20 @@ static void WritePanelLeds(char *lightData, const CanvasFrame &frame, int w,
 void UpdateHardware(AppState &app)
 {
     // --- Composite Hardware Preview ---
-    if (app.compositePreview)
+    if (app.compositePreview && !app.compositeReleased.frames.empty())
     {
         double now = ImGui::GetTime();
         if (now - app.compositeLastSend >= 1.0 / 30.0)
         {
             app.compositeLastSend = now;
+
+            // A shorter GIF can be swapped in while the preview is playing;
+            // keep both frame cursors in range.
+            if (app.compositeRelFrame >= (int)app.compositeReleased.frames.size())
+                app.compositeRelFrame = 0;
+            if (app.compositePressedLoaded && !app.compositePressed.frames.empty()
+                && app.compositePrsFrame >= (int)app.compositePressed.frames.size())
+                app.compositePrsFrame = 0;
 
             // Advance released animation
             int relTotal = (int)app.compositeReleased.frames.size();
@@ -199,6 +207,9 @@ void UpdateHardware(AppState &app)
 
             // Advance animation based on frame duration (play mode only)
             int totalFrames = (int)app.canvas.frames.size();
+            // Frames can be deleted while the preview is running.
+            if (app.livePreviewFrame >= totalFrames)
+                app.livePreviewFrame = 0;
             if (!app.livePreviewSync && totalFrames > 1)
             {
                 app.livePreviewFrameTime += (1.0 / 30.0) * app.previewSpeed;

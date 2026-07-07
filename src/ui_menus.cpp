@@ -3,6 +3,7 @@
 #include "gif_export.h"
 #include "gif_import.h"
 #include "imgui_internal.h" // g.NavCursorVisible for the modal Enter-confirm fallback
+#include "build_info.h"
 #include <SMX.h>
 #include <cstdio>
 #include <algorithm>
@@ -100,14 +101,22 @@ static bool ModalCancelPressed()
 
 static void UploadProgressCb(int progress, void *pUser)
 {
-    (void)pUser;
-    g_uploadProgress.store(progress);
+    // pUser carries the pad index; each pad reports into its own slot so a
+    // Both Pads upload is only complete when the slower pad finishes.
+    int pad = (int)(intptr_t)pUser;
+    g_uploadProgress[pad == 1 ? 1 : 0].store(progress);
 }
 
 void RenderMenus(AppState &app, SDL_Window *window)
 {
     ImGuiIO &io = ImGui::GetIO();
     static bool showAbout = false;
+    // Save/export result state, declared up here so the direct Save paths
+    // (File > Save, Ctrl+S) can report write failures through the same dialog.
+    static string exportError;
+    static bool showExportResult = false;
+    static bool exportSuccess = false;
+    static string compositeError;
 
     // Deferred file open dialog (needs to happen after popups close)
     if (app.deferOpenDialog)
@@ -220,11 +229,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 else
                 {
-                    string err;
-                    if (ExportGif(app.canvas, app.currentFilePath, err))
+                    if (ExportGif(app.canvas, app.currentFilePath, exportError))
                     {
                         app.dirty = false;
                         app.undo.MarkSaved();
+                    }
+                    else
+                    {
+                        exportSuccess = false;
+                        showExportResult = true;
                     }
                 }
             }
@@ -504,10 +517,22 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     }
                     if (ok)
                     {
+                        // Stop any pad preview and hand the lights back, so
+                        // the pad plays the uploaded animation as soon as the
+                        // transfer lands and it can be verified immediately.
+                        if (app.livePreview || app.compositePreview)
+                        {
+                            app.livePreview = false;
+                            app.compositePreview = false;
+                            SMX_ReenableAutoLights();
+                        }
                         app.uploadInProgress = true;
-                        g_uploadProgress.store(0);
-                        if (pad0) SMX_LightsUpload_BeginUpload(0, UploadProgressCb, nullptr);
-                        if (pad1) SMX_LightsUpload_BeginUpload(1, UploadProgressCb, nullptr);
+                        app.uploadPad0Active = pad0;
+                        app.uploadPad1Active = pad1;
+                        g_uploadProgress[0].store(0);
+                        g_uploadProgress[1].store(0);
+                        if (pad0) SMX_LightsUpload_BeginUpload(0, UploadProgressCb, (void*)(intptr_t)0);
+                        if (pad1) SMX_LightsUpload_BeginUpload(1, UploadProgressCb, (void*)(intptr_t)1);
                     }
                     else
                         app.showUploadDialog = true;
@@ -595,6 +620,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 for (int k = ImGuiKey_NamedKey_BEGIN; k < ImGuiKey_NamedKey_END; k++)
                 {
                     if (k == ImGuiKey_Escape) continue;
+                    // Real keyboard keys only: a stray click must not bind
+                    // MouseLeft, and a bare modifier would fight the
+                    // no-modifier gate on the timeline shortcuts.
+                    if (!ImGui::IsKeyboardKey((ImGuiKey)k) || ImGui::IsLRModKey((ImGuiKey)k)) continue;
                     if (ImGui::IsKeyPressed((ImGuiKey)k))
                     {
                         *key = k;
@@ -637,6 +666,29 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
         KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
         KeybindRow("Reverse Frames", &app.prefs.keys.reverseFrames);
+
+        // Two actions on the same key means one of them silently never fires.
+        {
+            struct Bind { const char *name; int key; };
+            const Bind binds[] = {
+                {"Draw", app.prefs.keys.draw}, {"Erase", app.prefs.keys.erase},
+                {"Fill", app.prefs.keys.fill}, {"Replace", app.prefs.keys.replace},
+                {"Pick Color", app.prefs.keys.pick}, {"Play/Pause", app.prefs.keys.playPause},
+                {"Prev Frame", app.prefs.keys.prevFrame}, {"Next Frame", app.prefs.keys.nextFrame},
+                {"First Frame", app.prefs.keys.firstFrame}, {"Last Frame", app.prefs.keys.lastFrame},
+                {"Add Frame", app.prefs.keys.addFrame}, {"Dup Frame", app.prefs.keys.dupFrame},
+                {"Delete Frame", app.prefs.keys.deleteFrame}, {"Shift Left", app.prefs.keys.shiftLeft},
+                {"Shift Right", app.prefs.keys.shiftRight}, {"Hold Sim", app.prefs.keys.holdSim},
+                {"Reverse Frames", app.prefs.keys.reverseFrames},
+            };
+            const int n = (int)(sizeof(binds) / sizeof(binds[0]));
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                    if (binds[i].key == binds[j].key)
+                        ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1),
+                            "Warning: %s and %s share the key %s",
+                            binds[i].name, binds[j].name, ImGui::GetKeyName((ImGuiKey)binds[i].key));
+        }
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
@@ -819,10 +871,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
 
     // --- GIF Export handling ---
-    static string exportError;
-    static bool showExportResult = false;
-    static bool exportSuccess = false;
-
     if (g_exportRequested)
     {
         g_exportRequested = false;
@@ -997,6 +1045,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         ImGui::OpenPopup("Composite Preview");
         app.showCompositeDialog = false;
+        compositeError.clear();
     }
     if (ImGui::BeginPopupModal("Composite Preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1016,8 +1065,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##rel"))
         {
-            app.compositeReleased = app.canvas;
-            app.compositeReleasedLoaded = true;
+            if (app.canvas.extent != CanvasExtent::FullPad)
+                compositeError = "Composite preview needs full-pad GIFs.";
+            else if (app.compositePressedLoaded && app.canvas.mode != app.compositePressed.mode)
+                compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+            else
+            {
+                app.compositeReleased = app.canvas;
+                app.compositeReleasedLoaded = true;
+                app.compositeRelFrame = 0;
+                app.compositeFrameTime = 0;
+                compositeError.clear();
+            }
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
@@ -1037,8 +1096,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##prs"))
         {
-            app.compositePressed = app.canvas;
-            app.compositePressedLoaded = true;
+            if (app.canvas.extent != CanvasExtent::FullPad)
+                compositeError = "Composite preview needs full-pad GIFs.";
+            else if (app.compositeReleasedLoaded && app.canvas.mode != app.compositeReleased.mode)
+                compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+            else
+            {
+                app.compositePressed = app.canvas;
+                app.compositePressedLoaded = true;
+                app.compositePrsFrame = 0;
+                app.compositePrsFrameTime = 0;
+                compositeError.clear();
+            }
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
@@ -1047,6 +1116,9 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::Checkbox("Fill black pixels (fully replace released)", &app.compositeFillBlack);
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Black pixels become opaque instead of transparent\nso pressed animation fully covers released"); ImGui::EndTooltip(); }
         }
+
+        if (!compositeError.empty())
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s", compositeError.c_str());
 
         ImGui::Separator();
         if (!app.compositePreview)
@@ -1098,7 +1170,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
     if (app.uploadInProgress)
     {
         ImGui::OpenPopup("Upload");
-        app.uploadProgress = g_uploadProgress.load();
+        // Overall progress = the slower pad; complete only when both are done.
+        int progress = 100;
+        if (app.uploadPad0Active) progress = std::min(progress, g_uploadProgress[0].load());
+        if (app.uploadPad1Active) progress = std::min(progress, g_uploadProgress[1].load());
+        app.uploadProgress = progress;
         if (app.uploadProgress >= 100)
             app.uploadInProgress = false;
     }
@@ -1190,15 +1266,41 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         g_compositeRelRequested = false;
         string err;
-        if (ImportGif(g_compositeRelPath, app.compositeReleased, err))
+        Canvas loaded;
+        if (!ImportGif(g_compositeRelPath, loaded, err))
+            compositeError = "Released: " + err;
+        else if (loaded.extent != CanvasExtent::FullPad)
+            compositeError = "Released GIF must be a full pad (23x24 or 14x15).";
+        else if (app.compositePressedLoaded && loaded.mode != app.compositePressed.mode)
+            compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+        else
+        {
+            app.compositeReleased = std::move(loaded);
             app.compositeReleasedLoaded = true;
+            app.compositeRelFrame = 0;
+            app.compositeFrameTime = 0;
+            compositeError.clear();
+        }
     }
     if (g_compositePrsRequested)
     {
         g_compositePrsRequested = false;
         string err;
-        if (ImportGif(g_compositePrsPath, app.compositePressed, err))
+        Canvas loaded;
+        if (!ImportGif(g_compositePrsPath, loaded, err))
+            compositeError = "Pressed: " + err;
+        else if (loaded.extent != CanvasExtent::FullPad)
+            compositeError = "Pressed GIF must be a full pad (23x24 or 14x15).";
+        else if (app.compositeReleasedLoaded && loaded.mode != app.compositeReleased.mode)
+            compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+        else
+        {
+            app.compositePressed = std::move(loaded);
             app.compositePressedLoaded = true;
+            app.compositePrsFrame = 0;
+            app.compositePrsFrameTime = 0;
+            compositeError.clear();
+        }
     }
 
     // --- Keyboard Shortcuts (only when not typing and no popup open) ---
@@ -1248,11 +1350,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             else
             {
-                string err;
-                if (ExportGif(app.canvas, app.currentFilePath, err))
+                if (ExportGif(app.canvas, app.currentFilePath, exportError))
                 {
                     app.dirty = false;
                     app.undo.MarkSaved();
+                }
+                else
+                {
+                    exportSuccess = false;
+                    showExportResult = true;
                 }
             }
         }
@@ -1304,6 +1410,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         ImGui::Text("StepManiaX GIF Maker");
         ImGui::Text("Version %s", SMX_GIF_MAKER_VERSION);
+        ImGui::TextDisabled("Build: %s", SMX_GIF_MAKER_BUILD);
         ImGui::Separator();
         ImGui::Text("Created by Fernando Chorney");
         ImGui::Spacing();

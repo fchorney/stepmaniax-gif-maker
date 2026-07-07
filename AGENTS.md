@@ -23,6 +23,9 @@
 ├── LICENSE
 ├── THIRD_PARTY_LICENSES
 ├── bump-version.sh
+├── cmake/
+│   └── GenerateBuildInfo.cmake # writes build_info.h (git branch @ hash) each build
+├── tests/                    # doctest unit tests (canvas geometry, GIF round-trip, undo)
 ├── docs/
 │   ├── guide.md              # User guide with feature documentation
 │   └── screenshots/          # Screenshots for guide and README
@@ -97,6 +100,7 @@ Bottom-left pixel (x=0, y=height-1) with R≥128 marks the loop point. Only the 
 ### Editing Model
 
 - Editor works on **one GIF at a time** (single animation)
+- Timeline multi-selection lives in `AppState` (`selectedFrames`/`selectAnchor`); single-frame edits apply to every selected frame when two or more are selected
 - Mode (Legacy/Modern) chosen at creation time, not hot-swappable
 - Canvas shows full 3×3 panel grid; only LED positions are editable
 - Timeline shared across all 9 panels (same frame count/durations)
@@ -117,7 +121,7 @@ Bottom-left pixel (x=0, y=height-1) with R≥128 marks the loop point. Only the 
 
 ### Undo System
 
-- Snapshot-based (full canvas state per entry)
+- Snapshot-based (full canvas state per entry: mode, extent, target, frames, loop markers)
 - Configurable max history (default 100, user-adjustable)
 - Tracks save point for accurate dirty state
 - ~53 KB per snapshot worst case (32 frames × 23×24 × 3 bytes)

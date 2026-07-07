@@ -40,6 +40,8 @@ private:
     struct Snapshot
     {
         CanvasMode mode;
+        CanvasExtent extent;
+        CanvasTarget target;
         int currentFrame;
         int loopFrame;
         int loopEndFrame;
