@@ -57,7 +57,16 @@ static bool ModalDefaultConfirm()
     ImGuiContext &g = *ImGui::GetCurrentContext();
     if (g.NavCursorVisible || ImGui::GetIO().WantTextInput)
         return false;
-    return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+    return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
+           || ImGui::IsKeyPressed(ImGuiKey_Space, false);
+}
+
+// Escape cancels/dismisses a modal. ImGui itself deliberately never closes
+// modal popups on Escape, so each dialog wires this into its cancel action.
+// Skipped while a text field is active: Escape then reverts the field's edit.
+static bool ModalCancelPressed()
+{
+    return !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
 }
 
 static void UploadProgressCb(int progress, void *pUser)
@@ -558,6 +567,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::Text("Keybindings");
         ImGui::Separator();
 
+        // Whether a key capture was armed at the top of the frame: a key that
+        // completes or cancels the capture (inside KeybindRow, which renders
+        // before the Close button) must not also confirm/close the dialog.
+        bool captureWasArmed = (rebindTarget != nullptr);
+
         auto KeybindRow = [&](const char *label, int *key) {
             ImGui::Text("%s:", label);
             ImGui::SameLine(120);
@@ -664,7 +678,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         ImGui::Separator();
         ImGui::SameLine();
-        if (ImGui::Button("Close") || (rebindTarget == nullptr && ModalDefaultConfirm()))
+        if (ImGui::Button("Close") || (!captureWasArmed && rebindTarget == nullptr && (ModalDefaultConfirm() || ModalCancelPressed())))
         {
             rebindTarget = nullptr;
             ImGui::CloseCurrentPopup();
@@ -794,7 +808,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         if (noPanels) ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
         {
             app.canvas.frames = hsvSnapshot;
             app.colorCountsDirty = true;
@@ -845,7 +859,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
         ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
         for (int p = 0; p < 9; p++)
@@ -874,7 +887,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ModalDefaultConfirm())
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
@@ -887,12 +900,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (exportSuccess)
             ImGui::Text("GIF saved successfully!");
         else
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Save failed: %s", exportError.c_str());
-        if (ImGui::Button("OK") || ModalDefaultConfirm())
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
@@ -906,7 +918,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("You have unsaved changes. Discard them?");
         ImGui::Separator();
         if (ImGui::Button("Discard"))
@@ -927,7 +938,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.running = false;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ModalDefaultConfirm())
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
         {
             app.pendingAction = Pending_None;
             ImGui::CloseCurrentPopup();
@@ -975,9 +986,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Import Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Import failed: %s", importError.c_str());
-        if (ImGui::Button("OK") || ModalDefaultConfirm())
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
@@ -992,7 +1002,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Composite Preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
 
         ImGui::Text("Released Animation:");
         ImGui::SameLine();
@@ -1092,7 +1101,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::TextColored(ImVec4(0, 1, 0, 1), "Playing...");
         }
         ImGui::SameLine();
-        if (ImGui::Button("Close", ImVec2(80, 0)) || ModalDefaultConfirm())
+        if (ImGui::Button("Close", ImVec2(80, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             if (app.compositePreview)
             {
@@ -1123,29 +1132,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Upload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (!app.uploadError.empty())
         {
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Upload failed: %s", app.uploadError.c_str());
-            if (ImGui::Button("OK") || ModalDefaultConfirm())
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
         }
         else if (app.uploadProgress >= 100)
         {
-            static bool uploadFocusSet = false;
             ImGui::Text("Upload complete!");
-            if (ImGui::Button("OK") || ModalDefaultConfirm())
-            {
-                uploadFocusSet = false;
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
-            }
-            if (!uploadFocusSet)
-            {
-                ImGui::SetKeyboardFocusHere(-1);
-                ImGui::SetNavCursorVisible(true);
-                uploadFocusSet = true;
-            }
         }
         else
         {
@@ -1163,7 +1161,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("New Animation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("Create a new animation. This will discard current work.");
         ImGui::Separator();
         static int newMode = 1;   // 0 = Legacy, 1 = Modern
@@ -1208,7 +1205,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         ImGui::SetItemDefaultFocus();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
@@ -1382,7 +1379,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::TextLink("github.com/fchorney/stepmaniax-gif-maker"))
             SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker");
         ImGui::Spacing();
-        if (ImGui::Button("Close", ImVec2(120, 0)) || ModalDefaultConfirm())
+        if (ImGui::Button("Close", ImVec2(120, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             showAbout = false;
             ImGui::CloseCurrentPopup();
