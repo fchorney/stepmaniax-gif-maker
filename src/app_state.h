@@ -37,8 +37,16 @@ struct AppState
     int rightClickPanel = -1;
     std::vector<Color> panelClipboard;
     bool panelClipboardValid = false;
-    CanvasFrame frameClipboard;
-    bool frameClipboardValid = false;
+    // Frame clipboard: holds one frame from a plain copy, or the whole
+    // multi-selection in index order. Empty = nothing copied yet.
+    std::vector<CanvasFrame> frameClipboard;
+
+    // True when the clipboard's block fits under the canvas frame cap.
+    bool CanPasteFrames() const
+    {
+        return !frameClipboard.empty()
+               && (int)canvas.frames.size() <= canvas.MaxFrames() - (int)frameClipboard.size();
+    }
 
     // File state
     std::string currentFilePath;

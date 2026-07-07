@@ -192,8 +192,12 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - **Shift+Click** selects the whole range between the last plain-clicked frame and the clicked one
 - **Ctrl+Click** (**Cmd+Click** on macOS) toggles individual frames in and out of the selection
 - Selected frames show a blue outline; the current frame keeps its yellow outline
+- **Ctrl+A** (**Cmd+A** on macOS) selects every frame; **Esc** clears the selection
 - With two or more frames selected, single-frame edits apply to every selected frame: Delete, Duplicate, frame duration, Clear Panel, Clear All Panels, Paste Panel, and Adjust HSV (via its "Selected frames" scope)
-- Duplicating a selection inserts the copies as a block right after it and selects the copies
+- **Copy/Paste** works on the selection: copying grabs all selected frames in order, pasting inserts them as a block after the current (or right-clicked) frame and selects the block
+- **Shift Left/Right** moves the whole selection one step as a block, keeping relative order; frames against an edge stay put
+- **Reverse Frames** (Edit menu or frame right-click) reverses the selected frames, or the whole animation when nothing is multi-selected
+- **Select Loop Region** (frame right-click) selects the frames from the loop point through the loop end (or the last frame)
 - Plain clicks, frame navigation, and structural edits (add, paste, reorder) collapse the selection
 
 ### Playback

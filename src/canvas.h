@@ -104,6 +104,21 @@ struct Canvas
     // right after the highest index, in index order. Returns the index of the
     // first copy, or -1 if nothing was duplicated.
     int DuplicateFrames(const std::vector<int> &indices);
+
+    // Insert a block of frames starting at idx, stopping cleanly at the frame
+    // cap. Returns how many were inserted.
+    int InsertFrames(int idx, const std::vector<CanvasFrame> &newFrames);
+
+    // Move the given frames one step left (dir = -1) or right (+1), keeping
+    // their relative order; frames already against an edge stay put and block
+    // the ones behind them. Loop markers and the current frame follow their
+    // images. Returns the frames' new indices (sorted).
+    std::vector<int> MoveFrames(const std::vector<int> &indices, int dir);
+
+    // Reverse the order of the images occupying the given indices (the slots
+    // themselves stay; a scattered set reverses across its own slots). Loop
+    // markers and the current frame follow their images.
+    void ReverseFrames(const std::vector<int> &indices);
     CanvasFrame &CurrentFrame();
     const CanvasFrame &CurrentFrame() const;
 

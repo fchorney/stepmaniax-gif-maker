@@ -440,3 +440,93 @@ TEST_CASE("AdjustHsv panel mask limits the recolor to selected panels")
     c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f});
     CHECK(c.frames[0].GetPixel(8, 8, w) == Color{0, 255, 0});
 }
+
+TEST_CASE("InsertFrames places a block and stops at the frame cap")
+{
+    Canvas c = TaggedCanvas(3);
+    c.loopFrame = 2;
+
+    std::vector<CanvasFrame> block = {c.frames[0], c.frames[1]};
+    int count = c.InsertFrames(1, block);
+    CHECK(count == 2);
+    REQUIRE((int)c.frames.size() == 5);
+    CHECK(c.frames[1].duration == doctest::Approx(0.01f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+    // The loop marker (image .03) shifted right past the inserted block.
+    CHECK(c.loopFrame == 4);
+
+    // Firmware cap: only the frames that fit are inserted.
+    Canvas fw;
+    fw.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Firmware);
+    while ((int)fw.frames.size() < 31) fw.AddFrame();
+    CHECK(fw.InsertFrames(0, block) == 1);
+    CHECK((int)fw.frames.size() == 32);
+}
+
+TEST_CASE("MoveFrames shifts a scattered block and blocks at the edges")
+{
+    Canvas c = TaggedCanvas(6);
+    c.loopFrame = 2;
+    c.currentFrame = 3;
+
+    // {2,3,5} left -> {1,2,4}; images travel, markers and current follow.
+    std::vector<int> moved = c.MoveFrames({2, 3, 5}, -1);
+    CHECK(moved == std::vector<int>{1, 2, 4});
+    CHECK(c.frames[1].duration == doctest::Approx(0.03f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[4].duration == doctest::Approx(0.06f));
+    CHECK(c.loopFrame == 1);
+    CHECK(c.currentFrame == 2);
+
+    // Frames packed against the left edge stay put and block the ones behind.
+    Canvas e = TaggedCanvas(4);
+    std::vector<int> stuck = e.MoveFrames({0, 1, 3}, -1);
+    CHECK(stuck == std::vector<int>{0, 1, 2});
+    CHECK(e.frames[2].duration == doctest::Approx(0.04f));
+
+    // Right move mirrors, blocking at the last frame.
+    Canvas r = TaggedCanvas(4);
+    r.currentFrame = 0;
+    std::vector<int> right = r.MoveFrames({0, 2, 3}, 1);
+    CHECK(right == std::vector<int>{1, 2, 3});
+    CHECK(r.frames[1].duration == doctest::Approx(0.01f));
+    CHECK(r.currentFrame == 1);
+
+    // A hopped-over unselected current frame follows its image too.
+    Canvas h = TaggedCanvas(3);
+    h.currentFrame = 1;
+    h.MoveFrames({2}, -1);
+    CHECK(h.currentFrame == 2);
+    CHECK(h.frames[2].duration == doctest::Approx(0.02f));
+}
+
+TEST_CASE("ReverseFrames mirrors images across the selected slots")
+{
+    // Contiguous reversal of the whole animation.
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+    c.currentFrame = 0;
+    c.ReverseFrames({0, 1, 2, 3});
+    CHECK(c.frames[0].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[3].duration == doctest::Approx(0.01f));
+    CHECK(c.loopFrame == 2);    // image .02 now sits at slot 2
+    CHECK(c.currentFrame == 3); // image .01 now sits at slot 3
+
+    // Scattered selection reverses across its own slots; others untouched.
+    Canvas s = TaggedCanvas(5);
+    s.ReverseFrames({0, 2, 4});
+    CHECK(s.frames[0].duration == doctest::Approx(0.05f));
+    CHECK(s.frames[1].duration == doctest::Approx(0.02f));
+    CHECK(s.frames[2].duration == doctest::Approx(0.03f));
+    CHECK(s.frames[3].duration == doctest::Approx(0.04f));
+    CHECK(s.frames[4].duration == doctest::Approx(0.01f));
+
+    // Reversing the loop region keeps it spanning the same frames.
+    Canvas l = TaggedCanvas(4);
+    l.loopFrame = 1;
+    l.loopEndFrame = 2;
+    l.ReverseFrames({1, 2});
+    CHECK(l.loopFrame == 1);
+    CHECK(l.loopEndFrame == 2);
+    CHECK(l.frames[1].duration == doctest::Approx(0.03f));
+}

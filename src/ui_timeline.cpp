@@ -62,6 +62,33 @@ void RenderTimeline(AppState &app)
             app.undo.SaveState(app.canvas, multi ? "Duplicate Frames" : "Duplicate Frame");
         };
 
+        // Shift the selected frames (or just the current one) one step left or
+        // right. A multi-selection moves as a block, keeping relative order.
+        auto shiftSelection = [&](int dir)
+        {
+            std::vector<int> sel = app.SelectionOrCurrent();
+            if (sel.size() > 1)
+            {
+                std::vector<int> moved = app.canvas.MoveFrames(sel, dir);
+                if (moved == sel) return; // packed against the edge: nothing to do
+                app.selectedFrames = moved;
+                app.selectAnchor = app.canvas.currentFrame;
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, dir < 0 ? "Shift Frames Left" : "Shift Frames Right");
+            }
+            else
+            {
+                int cur = app.canvas.currentFrame;
+                int to = cur + dir;
+                if (to < 0 || to >= (int)app.canvas.frames.size()) return;
+                app.canvas.SwapFrames(cur, to);
+                app.canvas.currentFrame = to;
+                app.ClearFrameSelection();
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, dir < 0 ? "Shift Left" : "Shift Right");
+            }
+        };
+
         // Playback logic
         if (playing && totalFrames > 1)
         {
@@ -225,23 +252,13 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
         ImGui::TextDisabled("Shift:");
         ImGui::SameLine();
-        if (ImGui::Button("<<") && app.canvas.currentFrame > 0)
-        {
-            app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame - 1);
-            app.canvas.currentFrame--;
-            app.ClearFrameSelection();
-            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
-        }
-        if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame left (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftLeft)); ImGui::EndTooltip(); }
+        if (ImGui::Button("<<"))
+            shiftSelection(-1);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift %s left (%s)", selCount > 1 ? "selected frames" : "frame", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftLeft)); ImGui::EndTooltip(); }
         ImGui::SameLine();
-        if (ImGui::Button(">>") && app.canvas.currentFrame < totalFrames - 1)
-        {
-            app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame + 1);
-            app.canvas.currentFrame++;
-            app.ClearFrameSelection();
-            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
-        }
-        if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift frame right (%s)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftRight)); ImGui::EndTooltip(); }
+        if (ImGui::Button(">>"))
+            shiftSelection(+1);
+        if (ImGui::BeginItemTooltip()) { ImGui::Text("Shift %s right (%s)", selCount > 1 ? "selected frames" : "frame", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.shiftRight)); ImGui::EndTooltip(); }
 
         // --- Timing ---
         ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
@@ -286,40 +303,44 @@ void RenderTimeline(AppState &app)
 
         // Arrow key navigation (when not typing and no popup open)
         bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        // The plain (unmodified) shortcuts must not fire while a modifier is
+        // held, or Ctrl+A (select all) would also add a frame via the A key.
+        bool noMods = !io.KeyCtrl && !io.KeySuper;
         if (!io.WantTextInput && !playing && !popupOpen)
         {
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.prevFrame) && app.canvas.currentFrame > 0)
-                selectOnly(app.canvas.currentFrame - 1);
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.nextFrame) && app.canvas.currentFrame < totalFrames - 1)
-                selectOnly(app.canvas.currentFrame + 1);
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.firstFrame))
-                selectOnly(0);
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.lastFrame))
-                selectOnly(totalFrames - 1);
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.addFrame) && totalFrames < app.canvas.MaxFrames())
-                { app.canvas.AddFrame(); app.ClearFrameSelection(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.dupFrame) && !dupOverLimit)
-                duplicateSelection();
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.deleteFrame) && totalFrames > 1)
-                deleteSelection();
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftLeft) && app.canvas.currentFrame > 0)
+            if (noMods)
             {
-                app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame - 1);
-                app.canvas.currentFrame--;
-                app.ClearFrameSelection();
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Left");
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.prevFrame) && app.canvas.currentFrame > 0)
+                    selectOnly(app.canvas.currentFrame - 1);
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.nextFrame) && app.canvas.currentFrame < totalFrames - 1)
+                    selectOnly(app.canvas.currentFrame + 1);
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.firstFrame))
+                    selectOnly(0);
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.lastFrame))
+                    selectOnly(totalFrames - 1);
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.addFrame) && totalFrames < app.canvas.MaxFrames())
+                    { app.canvas.AddFrame(); app.ClearFrameSelection(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Add Frame"); }
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.dupFrame) && !dupOverLimit)
+                    duplicateSelection();
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.deleteFrame) && totalFrames > 1)
+                    deleteSelection();
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftLeft))
+                    shiftSelection(-1);
+                if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftRight))
+                    shiftSelection(+1);
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !app.selectedFrames.empty())
+                    app.ClearFrameSelection();
             }
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.shiftRight) && app.canvas.currentFrame < totalFrames - 1)
+            if ((io.KeyCtrl || io.KeySuper) && ImGui::IsKeyPressed(ImGuiKey_A, false))
             {
-                app.canvas.SwapFrames(app.canvas.currentFrame, app.canvas.currentFrame + 1);
-                app.canvas.currentFrame++;
-                app.ClearFrameSelection();
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Shift Right");
+                app.selectedFrames.clear();
+                for (int i = 0; i < totalFrames; i++)
+                    app.selectedFrames.push_back(i);
             }
         }
         if (!io.WantTextInput)
         {
-            if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.playPause))
+            if (noMods && ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.playPause))
             {
                 playing = !playing;
                 if (playing)
@@ -333,7 +354,7 @@ void RenderTimeline(AppState &app)
             if (app.canvas.loopEndFrame >= 0)
             {
                 ImGuiKey holdKey = (ImGuiKey)app.prefs.keys.holdSim;
-                if (ImGui::IsKeyPressed(holdKey, false))
+                if (noMods && ImGui::IsKeyPressed(holdKey, false))
                 {
                     playing = false;
                     holdEngaged = true;
@@ -482,20 +503,34 @@ void RenderTimeline(AppState &app)
                 ImGui::OpenPopup("##frame_ctx");
             if (ImGui::BeginPopup("##frame_ctx"))
             {
-                if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
-                {
-                    app.frameClipboard = app.canvas.frames[f];
-                    app.frameClipboardValid = true;
-                }
-                if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
-                {
-                    app.canvas.InsertFrame(f + 1, app.frameClipboard);
-                    app.ClearFrameSelection();
-                    app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
-                }
-                // Deleting a frame that is part of the multi-selection deletes
-                // the whole selection; an unselected frame is deleted alone.
+                // Acting on a frame that is part of the multi-selection acts
+                // on the whole selection; an unselected frame acts alone.
                 bool ctxMulti = app.HasMultiSelection() && app.IsFrameSelected(f);
+                if (ImGui::MenuItem(ctxMulti ? "Copy Selected Frames" : "Copy Frame", SHORTCUT_MOD "+C"))
+                {
+                    app.frameClipboard.clear();
+                    if (ctxMulti)
+                        for (int fi : app.SelectionOrCurrent())
+                            app.frameClipboard.push_back(app.canvas.frames[fi]);
+                    else
+                        app.frameClipboard.push_back(app.canvas.frames[f]);
+                }
+                if (ImGui::MenuItem(app.frameClipboard.size() > 1 ? "Paste Frames" : "Paste Frame", SHORTCUT_MOD "+V", false, app.CanPasteFrames()))
+                {
+                    int count = app.canvas.InsertFrames(f + 1, app.frameClipboard);
+                    app.ClearFrameSelection();
+                    for (int i = f + 1; i < f + 1 + count && count > 1; i++)
+                        app.selectedFrames.push_back(i);
+                    app.selectAnchor = f + 1;
+                    app.dirty = true; app.colorCountsDirty = true;
+                    app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
+                }
+                if (ImGui::MenuItem("Reverse Selected Frames", nullptr, false, ctxMulti))
+                {
+                    app.canvas.ReverseFrames(app.SelectionOrCurrent());
+                    app.dirty = true; app.colorCountsDirty = true;
+                    app.undo.SaveState(app.canvas, "Reverse Frames (Selected)");
+                }
                 if (ImGui::MenuItem(ctxMulti ? "Delete Selected Frames" : "Delete Frame", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.deleteFrame), false, (int)app.canvas.frames.size() > 1))
                 {
                     if (ctxMulti)
@@ -572,6 +607,23 @@ void RenderTimeline(AppState &app)
                     }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("Last frame of the loop region; later frames become a\nrelease outro. Only used by deadsync host playback\n(per-panel judgement GIFs); SMX firmware and the\nofficial SDK ignore this marker.");
+                }
+                if (app.canvas.loopFrame > 0 || app.canvas.loopEndFrame >= 0)
+                {
+                    if (ImGui::MenuItem("Select Loop Region"))
+                    {
+                        int lo = app.canvas.loopFrame;
+                        int hi = app.canvas.loopEndFrame >= 0
+                                     ? std::min(app.canvas.loopEndFrame, totalFrames - 1)
+                                     : totalFrames - 1;
+                        app.selectedFrames.clear();
+                        for (int i = lo; i <= hi; i++)
+                            app.selectedFrames.push_back(i);
+                        app.canvas.currentFrame = lo;
+                        app.selectAnchor = lo;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Select the frames from the loop point through the\nloop end (or the last frame when no loop end is set)");
                 }
                 ImGui::EndPopup();
             }
