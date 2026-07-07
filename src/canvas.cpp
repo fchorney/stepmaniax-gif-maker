@@ -377,15 +377,19 @@ Color AdjustColorHsv(Color in, const HsvAdjust &adj)
     return Color{to8(rr + m), to8(gg + m), to8(bb + m)};
 }
 
-void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj)
+void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj, uint16_t panelMask)
 {
     if (frame_index < 0 || frame_index >= (int)frames.size()) return;
     auto &frame = frames[frame_index];
     int w = Width(), h = Height();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
-            if (IsLedPosition(x, y))
-                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
+        {
+            if (!IsLedPosition(x, y)) continue;
+            int panel = PanelAt(x, y);
+            if (panel < 0 || !(panelMask & (1u << panel))) continue;
+            frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
+        }
 }
 
 int Canvas::ColorCountForPanelAllFrames(int panel) const

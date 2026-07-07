@@ -33,7 +33,7 @@ We still need an icon for this app! I'm terrible at drawing/graphics related stu
 
 - **Pixel grid editor** for 14×15 (legacy) and 23×24 (modern) GIF formats, full 3×3 pad or single-panel
 - **Drawing tools** - Draw, Erase, Fill, Replace, Pick Color
-- **HSV adjust** - shift hue and apply gain+bias to saturation and value, on the current frame, selected frames, or all frames
+- **HSV adjust** - shift hue and apply gain+bias to saturation and value, on the current frame, selected frames, or all frames, limited to any subset of panels
 - **Clear panel** - wipe a single panel on the current frame, or across all frames at once
 - **Animation timeline** - add/duplicate/delete frames (including delete-all-left/right), reorder, per-frame duration, loop point, optional loop-end marker with hold/release playback simulation
 - **Multi-frame selection** - shift-click / ctrl-click (cmd on macOS) frames on the timeline; delete, duplicate, re-time, clear panels, paste panels, or HSV-shift all selected frames at once

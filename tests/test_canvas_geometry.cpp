@@ -415,3 +415,28 @@ TEST_CASE("ClearPanel on a specific frame leaves other frames alone")
     c.ClearPanel(0, -1);
     CHECK(c.frames[0].GetPixel(0, 0, w) == red);
 }
+
+TEST_CASE("AdjustHsv panel mask limits the recolor to selected panels")
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    int w = c.Width();
+    const Color red{255, 0, 0};
+    // One LED in panel 0 (0,0), panel 4 (8,8), and panel 8 (16,16).
+    REQUIRE(c.PanelAt(8, 8) == 4);
+    c.frames[0].SetPixel(0, 0, w, red);
+    c.frames[0].SetPixel(8, 8, w, red);
+    c.frames[0].SetPixel(16, 16, w, red);
+
+    // +120 deg on panels 0 and 8 only: red -> green there, panel 4 untouched.
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f}, (1u << 0) | (1u << 8));
+    CHECK(c.frames[0].GetPixel(0, 0, w) == Color{0, 255, 0});
+    CHECK(c.frames[0].GetPixel(8, 8, w) == red);
+    CHECK(c.frames[0].GetPixel(16, 16, w) == Color{0, 255, 0});
+
+    // An empty mask is a no-op; the default mask covers every panel.
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f}, 0);
+    CHECK(c.frames[0].GetPixel(8, 8, w) == red);
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f});
+    CHECK(c.frames[0].GetPixel(8, 8, w) == Color{0, 255, 0});
+}

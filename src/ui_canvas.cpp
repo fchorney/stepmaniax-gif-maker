@@ -385,6 +385,11 @@ void RenderCanvas(AppState &app)
                 app.canvas.QuantizePanel(app.rightClickPanel);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize Panel");
             }
+            if (ImGui::MenuItem("Adjust HSV This Panel...") && app.rightClickPanel >= 0)
+            {
+                app.hsvDialogPanelMask = (uint16_t)(1u << app.rightClickPanel);
+                app.showHsvDialog = true;
+            }
             ImGui::Separator();
             if (ImGui::MenuItem(multiSel ? "Clear All Panels (Selected Frames)" : "Clear All Panels"))
             {
