@@ -170,6 +170,9 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &app.loopPlayback);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("When off, playback plays once and stops on the last frame");
+        ImGui::SameLine();
+        ImGui::Checkbox("Follow", &app.prefs.followPlayback);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scroll the timeline to keep the current frame in view\nduring playback and when scrubbing");
         if (app.canvas.loopEndFrame >= 0)
         {
             ImGui::SameLine();
@@ -430,6 +433,12 @@ void RenderTimeline(AppState &app)
         float thumbW = w * thumbScale;
         float thumbH = h * thumbScale;
 
+        // Detect current-frame changes (playback, arrow keys, move buttons,
+        // Home/End, edits - all handled above). Follow only scrolls on a
+        // change, so hand-scrolling the strip while parked stays untouched.
+        static int followLastFrame = -1;
+        bool followFrameChanged = (app.canvas.currentFrame != followLastFrame);
+
         ImGui::BeginChild("##thumbs", ImVec2(0, thumbH + 20), false, ImGuiWindowFlags_HorizontalScrollbar);
 
         // Cache the visible x-range of the scroll viewport so per-frame
@@ -535,6 +544,12 @@ void RenderTimeline(AppState &app)
                 else
                     selectOnly(f);
             }
+
+            // Follow: when the current frame moved and left the visible
+            // strip, scroll to center it.
+            if (followFrameChanged && app.prefs.followPlayback && f == app.canvas.currentFrame
+                && (pos.x < visMinX || pos.x + thumbW > visMaxX))
+                ImGui::SetScrollHereX(0.5f);
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 ImGui::OpenPopup("##frame_ctx");
             if (ImGui::BeginPopup("##frame_ctx"))
@@ -668,6 +683,7 @@ void RenderTimeline(AppState &app)
             ImGui::PopID();
         }
         ImGui::EndChild();
+        followLastFrame = app.canvas.currentFrame;
 
         // Frame info, total duration, and preview-speed control at the bottom.
         ImGui::Text("Frame %d / %d", app.canvas.currentFrame + 1, (int)app.canvas.frames.size());

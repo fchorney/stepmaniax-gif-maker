@@ -43,6 +43,7 @@ struct Preferences
     int windowHeight = 900;
     float canvasZoom = 28.0f;
     float previewZoom = 15.0f;
+    bool followPlayback = true; // timeline auto-scrolls to keep the playing frame in view
 
     void Load(const std::string &path);
     void Save(const std::string &path) const;
