@@ -94,6 +94,9 @@ void RenderTimeline(AppState &app)
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &app.loopPlayback);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("When off, playback plays once and stops on the last frame");
+        ImGui::SameLine();
+        ImGui::Checkbox("Follow", &app.prefs.followPlayback);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scroll the timeline to keep the playing frame in view");
         if (app.canvas.loopEndFrame >= 0)
         {
             ImGui::SameLine();
@@ -378,6 +381,13 @@ void RenderTimeline(AppState &app)
             // drives the scroll-content width, and handles clicks on any frame.
             if (ImGui::InvisibleButton("##thumb", ImVec2(thumbW, thumbH)))
                 app.canvas.currentFrame = f;
+
+            // Follow playback: when the playing frame leaves the visible strip,
+            // scroll to center it. Only during playback, so manual scrubbing
+            // and clicks never fight the scroll position.
+            if ((playing || holdSim) && app.prefs.followPlayback && f == app.canvas.currentFrame
+                && (pos.x < visMinX || pos.x + thumbW > visMaxX))
+                ImGui::SetScrollHereX(0.5f);
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 ImGui::OpenPopup("##frame_ctx");
             if (ImGui::BeginPopup("##frame_ctx"))

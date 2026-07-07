@@ -188,6 +188,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 ### Playback
 
 - **Play/Pause** - animate the timeline at the configured frame durations
+- **Follow** - auto-scroll the timeline so the playing frame stays in view on long animations (on by default; saved to preferences)
 - **Previous/Next Frame** - step through frames one at a time
 - **First/Last Frame** - jump to the beginning or end
 

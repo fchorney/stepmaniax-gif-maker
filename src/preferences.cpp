@@ -67,6 +67,7 @@ void Preferences::Load(const std::string &path)
         if (j.contains("window_height")) windowHeight = j["window_height"];
         if (j.contains("canvas_zoom")) canvasZoom = j["canvas_zoom"];
         if (j.contains("preview_zoom")) previewZoom = j["preview_zoom"];
+        if (j.contains("follow_playback")) followPlayback = j["follow_playback"];
         if (j.contains("keybindings")) {
             auto &k = j["keybindings"];
             if (k.contains("draw")) keys.draw = k["draw"];
@@ -102,6 +103,7 @@ void Preferences::Save(const std::string &path) const
     j["window_height"] = windowHeight;
     j["canvas_zoom"] = canvasZoom;
     j["preview_zoom"] = previewZoom;
+    j["follow_playback"] = followPlayback;
     j["keybindings"] = {
         {"draw", keys.draw},
         {"erase", keys.erase},
