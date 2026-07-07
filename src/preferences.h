@@ -29,6 +29,7 @@ struct Keybindings
     int shiftLeft = 597;    // ImGuiKey_Comma
     int shiftRight = 599;   // ImGuiKey_Period
     int holdSim = 553;      // ImGuiKey_H
+    int reverseFrames = 563; // ImGuiKey_R
 };
 
 struct Preferences

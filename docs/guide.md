@@ -122,7 +122,7 @@ Both operations are undoable.
 
 ### Adjust HSV
 
-Found under **Edit → Adjust HSV**. Opens a dialog to shift hue and adjust the saturation and value of all non-black pixels on the canvas.
+Found under **Edit → Adjust HSV** (or right-click a panel and choose **Adjust HSV This Panel...**). Opens a dialog to shift hue and adjust the saturation and value of all non-black pixels on the canvas.
 
 | Control | Effect |
 |---------|--------|
@@ -134,9 +134,10 @@ Found under **Edit → Adjust HSV**. Opens a dialog to shift hue and adjust the 
 
 The gain+bias model allows dim or near-black pixels to reach full range: use a high gain to stretch low values, then trim with bias as needed.
 
-- **All Frames** checkbox - when checked, applies to every frame; when unchecked, applies to the current frame only.
+- **Apply to** - choose the frame scope: the current frame, the selected frames (when the timeline has a multi-selection), or all frames.
+- **Panels** - a 3x3 grid mirroring the pad layout limits the adjustment to specific panels; **All**/**None** buttons reset it. Opening the dialog from a panel's right-click menu preselects just that panel.
 - Changes are previewed live on the canvas as you drag the sliders.
-- Click **Apply** to commit (creates an undo entry) or **Cancel** to discard.
+- Click **Apply** to commit (creates an undo entry) or **Cancel** to discard. Apply is disabled while no panel is selected.
 
 ### Convert Mode
 
@@ -183,7 +184,21 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - **Duplicate Frame** - copy the current frame
 - **Delete Frame** - remove the current frame
 - **Delete All Left / Delete All Right** - right-click a frame to remove every frame before or after it; the loop markers are adjusted to stay valid
-- **Reorder** - drag frames or use Shift Left/Right shortcuts
+- **Reorder** - Shift Left/Right buttons (or the ,/. keys); a multi-selection moves as a block, keeping its relative order
+
+### Multi-Frame Selection
+
+- Click a thumbnail to select that frame
+- **Shift+Click** selects the whole range between the last plain-clicked frame and the clicked one
+- **Ctrl+Click** (**Cmd+Click** on macOS) toggles individual frames in and out of the selection
+- Selected frames show a blue outline; the current frame keeps its yellow outline
+- **Ctrl+A** (**Cmd+A** on macOS) selects every frame; **Esc** clears the selection
+- With two or more frames selected, single-frame edits apply to every selected frame: Delete, Duplicate, frame duration, Clear Panel, Clear All Panels, Paste Panel, and Adjust HSV (via its "Selected frames" scope)
+- **Copy/Paste** works on the selection: copying grabs all selected frames in order, pasting inserts them as a block after the current (or right-clicked) frame and selects the block
+- **Shift Left/Right** moves the whole selection one step as a block, keeping relative order; frames against an edge stay put
+- **Reverse Frames** (Edit menu, frame right-click, or the R key) reverses the selected frames, or the whole animation when nothing is multi-selected
+- **Select Loop Region** (frame right-click) selects the frames from the loop point through the loop end (or the last frame)
+- Plain clicks, frame navigation, and structural edits (add, paste, reorder) collapse the selection
 
 ### Playback
 
@@ -203,6 +218,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - Right-click a frame to set it as the loop point
 - After the last frame plays, the animation loops back to this frame
 - Default loop point is frame 0
+- The loop point and loop-end markers stay on the same frame image when frames are added, duplicated, pasted, deleted, or reordered around them
 
 ### Loop-End Marker (Host Target Only)
 
@@ -213,6 +229,8 @@ When the canvas target is **Host**, right-clicking a frame also exposes a **Set 
 3. **Outro** - frames after the loop-end frame; plays once on release
 
 The loop-end frame is shown with an orange downward-pointing marker in the timeline. Right-click the same frame again to clear it.
+
+Without a loop-end marker, the Hold button appears disabled on Host-target canvases (hover it for an explanation), and pressing the Hold Sim key shows a short hint in the timeline.
 
 This is a [deadsync](https://github.com/pnn64/deadsync) extension for per-panel judgement GIFs. SMX firmware and the official SDK ignore the loop-end marker.
 
@@ -311,7 +329,7 @@ Plays the animation on the pad independently with proper frame timing, regardles
 
 ## Composite Preview
 
-Load both a **released** and **pressed** animation to preview how they overlay based on live pad input.
+Load both a **released** and **pressed** animation to preview how they overlay based on live pad input. Both must be full-pad GIFs sharing the same Modern/Legacy mode; mismatches and load failures are reported in the dialog.
 
 ![Composite Preview](screenshots/composite-preview.png)
 
@@ -351,6 +369,8 @@ Write animations permanently to pad EEPROM for offline playback (no computer nee
 4. Select target: Pad 1, Pad 2, or Both
 5. Click Upload and wait for completion
 
+Starting an upload stops any running pad preview and re-enables auto lights, so the pad plays the uploaded animation as soon as the transfer finishes.
+
 ### Fill Black Option
 
 For pressed animations, enable "Fill Black" to replace black pixels with (1,1,1). This makes the pressed animation fully opaque instead of showing the released animation through black pixels.
@@ -386,8 +406,10 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Quit | Ctrl+Q | |
 | Undo | Ctrl+Z | |
 | Redo | Ctrl+Y | |
-| Copy Frame | Ctrl+C | |
-| Paste Frame | Ctrl+V | |
+| Copy Frame(s) | Ctrl+C | Copies the multi-selection when one exists |
+| Paste Frame(s) | Ctrl+V | Pastes the copied block after the current frame |
+| Select All Frames | Ctrl+A | Fixed shortcut |
+| Clear Selection | Esc | Fixed shortcut |
 | Draw | 1 | Remappable |
 | Erase | 2 | Remappable |
 | Fill | 3 | Remappable |
@@ -401,9 +423,12 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 | Delete Frame | Delete | Remappable |
 | Shift Frame | ,/. | Remappable |
 | Hold Sim | H | Remappable; only active when a loop-end marker is set |
+| Reverse Frames | R | Remappable; selected frames, or all frames without a multi-selection |
 | Adjust HSV | Ctrl+E | Fixed shortcut |
 
 On macOS, Ctrl shortcuts use Cmd instead.
+
+In dialogs, **Enter** or **Space** confirms the default action (shown with an outline) and **Esc** cancels; arrow keys move the focus between buttons, and Enter/Space then activate the focused one. Keyboard navigation is active only inside dialogs and menus, so arrow keys and Space never grab buttons in the main editor.
 
 ---
 

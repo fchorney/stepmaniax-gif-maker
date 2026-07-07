@@ -12,6 +12,7 @@ struct GifWriter
 {
     FILE *fp = nullptr;
     std::vector<char> *buf = nullptr;
+    bool writeFailed = false;
 
     bool Open(const std::string &path)
     {
@@ -21,7 +22,11 @@ struct GifWriter
     void OpenMemory(std::vector<char> *outBuf) { buf = outBuf; buf->clear(); }
     void Write(const void *data, size_t size)
     {
-        if (fp) fwrite(data, 1, size, fp);
+        if (fp)
+        {
+            if (fwrite(data, 1, size, fp) != size)
+                writeFailed = true;
+        }
         else if (buf) buf->insert(buf->end(), (const char*)data, (const char*)data + size);
     }
     void WriteByte(uint8_t b) { Write(&b, 1); }
@@ -31,7 +36,15 @@ struct GifWriter
         WriteByte(lo);
         WriteByte(hi);
     }
-    void Close() { if (fp) fclose(fp); fp = nullptr; }
+    // Returns false if any write, or the final flush on close, failed.
+    bool Close()
+    {
+        bool ok = !writeFailed;
+        if (fp && fclose(fp) != 0)
+            ok = false;
+        fp = nullptr;
+        return ok;
+    }
 };
 
 // Build global palette from all frames. Index 0 = black (transparent).
@@ -262,7 +275,11 @@ bool ExportGif(const Canvas &canvas, const std::string &path, std::string &outEr
     { outError = "Could not open file for writing: " + path; return false; }
 
     bool ok = WriteGifData(gw, canvas, palette, lookup, outError);
-    gw.Close();
+    if (!gw.Close() && ok)
+    {
+        outError = "Write failed (disk full or file not writable): " + path;
+        ok = false;
+    }
     return ok;
 }
 

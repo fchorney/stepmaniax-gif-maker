@@ -86,10 +86,19 @@ void Preferences::Load(const std::string &path)
             if (k.contains("shift_left")) keys.shiftLeft = k["shift_left"];
             if (k.contains("shift_right")) keys.shiftRight = k["shift_right"];
             if (k.contains("hold_sim")) keys.holdSim = k["hold_sim"];
+            if (k.contains("reverse_frames")) keys.reverseFrames = k["reverse_frames"];
         }
     } catch (...) {
         // Ignore malformed config, use defaults
     }
+
+    // Sanity-clamp numeric values so a hand-edited or corrupted file can't
+    // produce a 0x0 window or an unusable zoom.
+    windowWidth = std::clamp(windowWidth, 640, 8192);
+    windowHeight = std::clamp(windowHeight, 480, 8192);
+    canvasZoom = std::clamp(canvasZoom, 8.0f, 80.0f);
+    previewZoom = std::clamp(previewZoom, 3.0f, 40.0f);
+    maxUndoHistory = std::clamp(maxUndoHistory, 10, 100000);
 }
 
 void Preferences::Save(const std::string &path) const
@@ -121,6 +130,7 @@ void Preferences::Save(const std::string &path) const
         {"shift_left", keys.shiftLeft},
         {"shift_right", keys.shiftRight},
         {"hold_sim", keys.holdSim},
+        {"reverse_frames", keys.reverseFrames},
     };
 
     std::ofstream f(path);

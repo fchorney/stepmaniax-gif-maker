@@ -33,28 +33,36 @@ void Canvas::Init(CanvasMode m, CanvasExtent e, CanvasTarget t)
 
 void Canvas::AddFrame()
 {
-    if ((int)frames.size() >= MaxFrames()) return;
     CanvasFrame f;
     f.pixels.resize(Width() * Height(), Color{0, 0, 0});
     if (frames.empty())
     {
         frames.push_back(std::move(f));
         currentFrame = 0;
+        return;
     }
-    else
-    {
-        frames.insert(frames.begin() + currentFrame + 1, std::move(f));
-        currentFrame++;
-    }
+    InsertFrame(currentFrame + 1, f);
 }
 
 void Canvas::DuplicateFrame(int idx)
 {
-    if ((int)frames.size() >= MaxFrames()) return;
     if (idx < 0 || idx >= (int)frames.size()) return;
     CanvasFrame copy = frames[idx];
-    frames.insert(frames.begin() + idx + 1, std::move(copy));
-    currentFrame = idx + 1;
+    InsertFrame(idx + 1, copy);
+}
+
+void Canvas::InsertFrame(int idx, const CanvasFrame &frame)
+{
+    if ((int)frames.size() >= MaxFrames()) return;
+    if (idx < 0) idx = 0;
+    if (idx > (int)frames.size()) idx = (int)frames.size();
+    frames.insert(frames.begin() + idx, frame);
+    currentFrame = idx;
+    // Markers at or after the insertion point shift right with their frame image.
+    if (loopFrame >= idx)
+        loopFrame++;
+    if (loopEndFrame >= idx)
+        loopEndFrame++;
 }
 
 void Canvas::DeleteFrame(int idx)
@@ -64,10 +72,172 @@ void Canvas::DeleteFrame(int idx)
     frames.erase(frames.begin() + idx);
     if (currentFrame >= (int)frames.size())
         currentFrame = (int)frames.size() - 1;
-    if (loopFrame >= (int)frames.size())
+
+    // Markers after the deleted frame shift left with their frame image. A loop
+    // start on the deleted frame moves to the next frame (same index); a loop
+    // end on it shrinks to the previous frame, clearing if the region vanishes.
+    if (loopFrame > idx)
+        loopFrame--;
+    else if (loopFrame >= (int)frames.size())
         loopFrame = (int)frames.size() - 1;
-    if (loopEndFrame >= (int)frames.size())
-        loopEndFrame = (int)frames.size() - 1;
+    if (loopEndFrame >= idx)
+        loopEndFrame--;
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        loopEndFrame = -1;
+}
+
+void Canvas::DeleteFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < (int)frames.size())
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (sorted.empty()) return;
+
+    // Delete back to front so earlier indices stay valid; DeleteFrame keeps
+    // at least one frame and tracks the loop markers.
+    for (auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+        DeleteFrame(*it);
+
+    // Land on the frame that took the first deleted slot.
+    currentFrame = std::min(sorted.front(), (int)frames.size() - 1);
+}
+
+int Canvas::DuplicateFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < (int)frames.size())
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (sorted.empty()) return -1;
+
+    std::vector<CanvasFrame> copies;
+    for (int i : sorted)
+        copies.push_back(frames[i]);
+
+    int firstCopy = sorted.back() + 1;
+    int at = firstCopy;
+    for (const auto &copy : copies)
+    {
+        if ((int)frames.size() >= MaxFrames()) break; // stop cleanly at the cap
+        InsertFrame(at++, copy);
+    }
+    return at > firstCopy ? firstCopy : -1;
+}
+
+int Canvas::InsertFrames(int idx, const std::vector<CanvasFrame> &newFrames)
+{
+    if (idx < 0) idx = 0;
+    if (idx > (int)frames.size()) idx = (int)frames.size();
+    int inserted = 0;
+    for (const auto &f : newFrames)
+    {
+        if ((int)frames.size() >= MaxFrames()) break; // stop cleanly at the cap
+        InsertFrame(idx + inserted, f);
+        inserted++;
+    }
+    return inserted;
+}
+
+// Validate, sort, and dedupe a frame index list against the current frame count.
+static std::vector<int> SortedValidIndices(const std::vector<int> &indices, int frameCount)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < frameCount)
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    return sorted;
+}
+
+std::vector<int> Canvas::MoveFrames(const std::vector<int> &indices, int dir)
+{
+    std::vector<int> sorted = SortedValidIndices(indices, (int)frames.size());
+    if (sorted.empty() || (dir != -1 && dir != 1))
+        return sorted;
+
+    // SwapFrames tracks the loop markers; the current frame follows its image
+    // whether it is part of the move or gets hopped over.
+    auto swapFollowingCurrent = [&](int a, int b)
+    {
+        SwapFrames(a, b);
+        if (currentFrame == a) currentFrame = b;
+        else if (currentFrame == b) currentFrame = a;
+    };
+
+    std::vector<int> result;
+    if (dir < 0)
+    {
+        for (int i : sorted)
+        {
+            bool blocked = (i == 0) || (!result.empty() && result.back() == i - 1);
+            if (!blocked)
+                swapFollowingCurrent(i, i - 1);
+            result.push_back(blocked ? i : i - 1);
+        }
+    }
+    else
+    {
+        for (auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+        {
+            int i = *it;
+            bool blocked = (i == (int)frames.size() - 1)
+                           || (!result.empty() && result.back() == i + 1);
+            if (!blocked)
+                swapFollowingCurrent(i, i + 1);
+            result.push_back(blocked ? i : i + 1);
+        }
+        std::reverse(result.begin(), result.end());
+    }
+    return result;
+}
+
+void Canvas::ReverseFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted = SortedValidIndices(indices, (int)frames.size());
+    int n = (int)sorted.size();
+    if (n < 2) return;
+
+    std::vector<CanvasFrame> imgs;
+    for (int i : sorted)
+        imgs.push_back(std::move(frames[i]));
+    for (int k = 0; k < n; k++)
+        frames[sorted[k]] = std::move(imgs[n - 1 - k]);
+
+    // Markers and the current frame follow their images to the mirrored slot.
+    auto remap = [&](int m)
+    {
+        auto it = std::lower_bound(sorted.begin(), sorted.end(), m);
+        if (it == sorted.end() || *it != m) return m;
+        return sorted[n - 1 - (int)(it - sorted.begin())];
+    };
+    loopFrame = remap(loopFrame);
+    if (loopEndFrame >= 0) loopEndFrame = remap(loopEndFrame);
+    currentFrame = remap(currentFrame);
+    // Reversing can invert the loop region; keep it spanning the same frames.
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        std::swap(loopFrame, loopEndFrame);
+}
+
+void Canvas::SwapFrames(int a, int b)
+{
+    if (a == b) return;
+    if (a < 0 || a >= (int)frames.size()) return;
+    if (b < 0 || b >= (int)frames.size()) return;
+    std::swap(frames[a], frames[b]);
+    if (loopFrame == a) loopFrame = b;
+    else if (loopFrame == b) loopFrame = a;
+    if (loopEndFrame == a) loopEndFrame = b;
+    else if (loopEndFrame == b) loopEndFrame = a;
+    // Following the images can invert the region (e.g. swapping the loop start
+    // past the loop end); keep the region spanning the same frames.
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        std::swap(loopFrame, loopEndFrame);
 }
 
 CanvasFrame &Canvas::CurrentFrame() { return frames[currentFrame]; }
@@ -174,8 +344,14 @@ bool Canvas::IsLedPosition(int x, int y) const
 
 void Canvas::ClearPanel(int panel)
 {
+    ClearPanel(panel, currentFrame);
+}
+
+void Canvas::ClearPanel(int panel, int frameIndex)
+{
     if (panel < 0 || panel > 8) return;
-    auto &frame = CurrentFrame();
+    if (frameIndex < 0 || frameIndex >= (int)frames.size()) return;
+    auto &frame = frames[frameIndex];
     int w = Width(), h = Height();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -296,15 +472,19 @@ Color AdjustColorHsv(Color in, const HsvAdjust &adj)
     return Color{to8(rr + m), to8(gg + m), to8(bb + m)};
 }
 
-void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj)
+void Canvas::AdjustHsv(int frame_index, const HsvAdjust &adj, uint16_t panelMask)
 {
     if (frame_index < 0 || frame_index >= (int)frames.size()) return;
     auto &frame = frames[frame_index];
     int w = Width(), h = Height();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
-            if (IsLedPosition(x, y))
-                frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
+        {
+            if (!IsLedPosition(x, y)) continue;
+            int panel = PanelAt(x, y);
+            if (panel < 0 || !(panelMask & (1u << panel))) continue;
+            frame.SetPixel(x, y, w, AdjustColorHsv(frame.GetPixel(x, y, w), adj));
+        }
 }
 
 int Canvas::ColorCountForPanelAllFrames(int panel) const

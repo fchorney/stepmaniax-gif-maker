@@ -236,3 +236,297 @@ TEST_CASE("ClearPanelAllFrames clears one panel across every frame")
         CHECK(f.GetPixel(16, 16, w) == red);
     }
 }
+
+// Build a Host canvas with `count` frames, each tagged by a unique duration so
+// tests can tell which frame image landed where after structural edits.
+static Canvas TaggedCanvas(int count)
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    while ((int)c.frames.size() < count) c.AddFrame();
+    for (int i = 0; i < count; i++)
+        c.frames[i].duration = 0.01f * (i + 1);
+    return c;
+}
+
+TEST_CASE("loop markers stay on the same frame image across inserts")
+{
+    // 4 frames: intro 0, loop 1..2, outro 3.
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+    c.loopEndFrame = 2;
+
+    // Insert before the loop region: both markers shift right.
+    c.currentFrame = 0;
+    c.AddFrame(); // blank inserted at index 1
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 3);
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+
+    // Insert inside the loop region: only the loop end shifts.
+    c.DuplicateFrame(2); // copy of the loop-start image at index 3
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 4);
+
+    // Insert after the loop region: no marker moves.
+    CanvasFrame tail = c.frames.back();
+    c.InsertFrame((int)c.frames.size(), tail);
+    CHECK(c.loopFrame == 2);
+    CHECK(c.loopEndFrame == 4);
+    CHECK(c.currentFrame == (int)c.frames.size() - 1);
+}
+
+TEST_CASE("loop markers stay on the same frame image across deletes")
+{
+    // 5 frames: intro 0, loop 1..3, outro 4.
+    Canvas c = TaggedCanvas(5);
+    c.loopFrame = 1;
+    c.loopEndFrame = 3;
+
+    // Delete before the loop region: both markers shift left.
+    c.DeleteFrame(0);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 2);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+
+    // Delete inside the loop region: only the loop end shifts.
+    c.DeleteFrame(1);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 1);
+
+    // Delete the loop-end frame itself: the region shrinks to the previous frame.
+    c.DeleteFrame(1);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 0);
+
+    // Delete the frame holding both markers: the loop end clears, the loop
+    // start moves to the next frame (same index).
+    c.DeleteFrame(0);
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == -1);
+}
+
+TEST_CASE("deleting the loop start keeps the marker on the next frame")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 2;
+    c.DeleteFrame(2);
+    CHECK(c.loopFrame == 2); // now the image that was frame 3
+    CHECK(c.frames[2].duration == doctest::Approx(0.04f));
+
+    // Deleting a loop start that is the last frame clamps it back into range.
+    c.loopFrame = 2;
+    c.DeleteFrame(2);
+    CHECK(c.loopFrame == 1);
+}
+
+TEST_CASE("swapping frames moves loop markers with their images")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+
+    // Shift the loop-start image right: the marker follows.
+    c.SwapFrames(1, 2);
+    CHECK(c.loopFrame == 2);
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+
+    // Swapping two unmarked frames leaves markers alone.
+    c.SwapFrames(0, 3);
+    CHECK(c.loopFrame == 2);
+
+    // Swapping loop start past loop end keeps the region spanning the same
+    // frames instead of inverting.
+    c.loopFrame = 1;
+    c.loopEndFrame = 2;
+    c.SwapFrames(1, 2);
+    CHECK(c.loopFrame == 1);
+    CHECK(c.loopEndFrame == 2);
+}
+
+TEST_CASE("DeleteFrames removes a scattered set in one pass")
+{
+    Canvas c = TaggedCanvas(6);
+    c.loopFrame = 1;
+    c.loopEndFrame = 4;
+
+    // Duplicates and out-of-range entries are ignored.
+    c.DeleteFrames({4, 0, 2, 2, 99, -1});
+    REQUIRE((int)c.frames.size() == 3);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+    CHECK(c.frames[1].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.06f));
+    // Loop start (image .02) slid to index 0; loop end (image .05, deleted)
+    // shrank onto the previous surviving frame (.04, index 1).
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 1);
+    // Current frame lands where the first deleted frame was.
+    CHECK(c.currentFrame == 0);
+
+    // Deleting every frame keeps the first one.
+    c.DeleteFrames({0, 1, 2});
+    REQUIRE((int)c.frames.size() == 1);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+    CHECK(c.currentFrame == 0);
+}
+
+TEST_CASE("DuplicateFrames inserts the copies as a block after the selection")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 3;
+
+    int first = c.DuplicateFrames({0, 2});
+    CHECK(first == 3);
+    REQUIRE((int)c.frames.size() == 6);
+    // Block sits after the highest selected index, in selection order.
+    CHECK(c.frames[3].duration == doctest::Approx(0.01f));
+    CHECK(c.frames[4].duration == doctest::Approx(0.03f));
+    // The loop marker (image .04) shifted right past the inserted block.
+    CHECK(c.loopFrame == 5);
+
+    // At the firmware cap, duplication stops cleanly.
+    Canvas fw;
+    fw.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Firmware);
+    while ((int)fw.frames.size() < 31) fw.AddFrame();
+    std::vector<int> all;
+    for (int i = 0; i < 31; i++) all.push_back(i);
+    int firstFw = fw.DuplicateFrames(all); // room for only one copy
+    CHECK(firstFw == 31);
+    CHECK((int)fw.frames.size() == 32);
+}
+
+TEST_CASE("ClearPanel on a specific frame leaves other frames alone")
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    c.AddFrame();
+    c.AddFrame(); // 3 frames
+    int w = c.Width();
+    const Color red{255, 0, 0};
+    for (auto &f : c.frames)
+        f.SetPixel(0, 0, w, red); // panel 0 LED
+
+    c.ClearPanel(0, 1);
+    CHECK(c.frames[0].GetPixel(0, 0, w) == red);
+    CHECK(c.frames[1].GetPixel(0, 0, w).IsBlack());
+    CHECK(c.frames[2].GetPixel(0, 0, w) == red);
+
+    // Out-of-range frame index is a no-op, not a crash.
+    c.ClearPanel(0, 99);
+    c.ClearPanel(0, -1);
+    CHECK(c.frames[0].GetPixel(0, 0, w) == red);
+}
+
+TEST_CASE("AdjustHsv panel mask limits the recolor to selected panels")
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    int w = c.Width();
+    const Color red{255, 0, 0};
+    // One LED in panel 0 (0,0), panel 4 (8,8), and panel 8 (16,16).
+    REQUIRE(c.PanelAt(8, 8) == 4);
+    c.frames[0].SetPixel(0, 0, w, red);
+    c.frames[0].SetPixel(8, 8, w, red);
+    c.frames[0].SetPixel(16, 16, w, red);
+
+    // +120 deg on panels 0 and 8 only: red -> green there, panel 4 untouched.
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f}, (1u << 0) | (1u << 8));
+    CHECK(c.frames[0].GetPixel(0, 0, w) == Color{0, 255, 0});
+    CHECK(c.frames[0].GetPixel(8, 8, w) == red);
+    CHECK(c.frames[0].GetPixel(16, 16, w) == Color{0, 255, 0});
+
+    // An empty mask is a no-op; the default mask covers every panel.
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f}, 0);
+    CHECK(c.frames[0].GetPixel(8, 8, w) == red);
+    c.AdjustHsv(0, HsvAdjust{.hue_deg = 120.0f});
+    CHECK(c.frames[0].GetPixel(8, 8, w) == Color{0, 255, 0});
+}
+
+TEST_CASE("InsertFrames places a block and stops at the frame cap")
+{
+    Canvas c = TaggedCanvas(3);
+    c.loopFrame = 2;
+
+    std::vector<CanvasFrame> block = {c.frames[0], c.frames[1]};
+    int count = c.InsertFrames(1, block);
+    CHECK(count == 2);
+    REQUIRE((int)c.frames.size() == 5);
+    CHECK(c.frames[1].duration == doctest::Approx(0.01f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.02f));
+    // The loop marker (image .03) shifted right past the inserted block.
+    CHECK(c.loopFrame == 4);
+
+    // Firmware cap: only the frames that fit are inserted.
+    Canvas fw;
+    fw.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Firmware);
+    while ((int)fw.frames.size() < 31) fw.AddFrame();
+    CHECK(fw.InsertFrames(0, block) == 1);
+    CHECK((int)fw.frames.size() == 32);
+}
+
+TEST_CASE("MoveFrames shifts a scattered block and blocks at the edges")
+{
+    Canvas c = TaggedCanvas(6);
+    c.loopFrame = 2;
+    c.currentFrame = 3;
+
+    // {2,3,5} left -> {1,2,4}; images travel, markers and current follow.
+    std::vector<int> moved = c.MoveFrames({2, 3, 5}, -1);
+    CHECK(moved == std::vector<int>{1, 2, 4});
+    CHECK(c.frames[1].duration == doctest::Approx(0.03f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[4].duration == doctest::Approx(0.06f));
+    CHECK(c.loopFrame == 1);
+    CHECK(c.currentFrame == 2);
+
+    // Frames packed against the left edge stay put and block the ones behind.
+    Canvas e = TaggedCanvas(4);
+    std::vector<int> stuck = e.MoveFrames({0, 1, 3}, -1);
+    CHECK(stuck == std::vector<int>{0, 1, 2});
+    CHECK(e.frames[2].duration == doctest::Approx(0.04f));
+
+    // Right move mirrors, blocking at the last frame.
+    Canvas r = TaggedCanvas(4);
+    r.currentFrame = 0;
+    std::vector<int> right = r.MoveFrames({0, 2, 3}, 1);
+    CHECK(right == std::vector<int>{1, 2, 3});
+    CHECK(r.frames[1].duration == doctest::Approx(0.01f));
+    CHECK(r.currentFrame == 1);
+
+    // A hopped-over unselected current frame follows its image too.
+    Canvas h = TaggedCanvas(3);
+    h.currentFrame = 1;
+    h.MoveFrames({2}, -1);
+    CHECK(h.currentFrame == 2);
+    CHECK(h.frames[2].duration == doctest::Approx(0.02f));
+}
+
+TEST_CASE("ReverseFrames mirrors images across the selected slots")
+{
+    // Contiguous reversal of the whole animation.
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 1;
+    c.currentFrame = 0;
+    c.ReverseFrames({0, 1, 2, 3});
+    CHECK(c.frames[0].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[3].duration == doctest::Approx(0.01f));
+    CHECK(c.loopFrame == 2);    // image .02 now sits at slot 2
+    CHECK(c.currentFrame == 3); // image .01 now sits at slot 3
+
+    // Scattered selection reverses across its own slots; others untouched.
+    Canvas s = TaggedCanvas(5);
+    s.ReverseFrames({0, 2, 4});
+    CHECK(s.frames[0].duration == doctest::Approx(0.05f));
+    CHECK(s.frames[1].duration == doctest::Approx(0.02f));
+    CHECK(s.frames[2].duration == doctest::Approx(0.03f));
+    CHECK(s.frames[3].duration == doctest::Approx(0.04f));
+    CHECK(s.frames[4].duration == doctest::Approx(0.01f));
+
+    // Reversing the loop region keeps it spanning the same frames.
+    Canvas l = TaggedCanvas(4);
+    l.loopFrame = 1;
+    l.loopEndFrame = 2;
+    l.ReverseFrames({1, 2});
+    CHECK(l.loopFrame == 1);
+    CHECK(l.loopEndFrame == 2);
+    CHECK(l.frames[1].duration == doctest::Approx(0.03f));
+}

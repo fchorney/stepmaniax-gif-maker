@@ -82,9 +82,43 @@ struct Canvas
 
     void Init(CanvasMode m, CanvasExtent e = CanvasExtent::FullPad,
               CanvasTarget t = CanvasTarget::Firmware);
+
+    // Frame add/duplicate/delete/insert/swap keep the loop markers on the same
+    // frame image: markers shift with insertions and deletions before them and
+    // follow their frame through a swap, instead of staying at a fixed index.
     void AddFrame();
     void DuplicateFrame(int idx);
     void DeleteFrame(int idx);
+
+    // Insert a frame at idx (becomes the current frame).
+    void InsertFrame(int idx, const CanvasFrame &frame);
+
+    // Swap two frames, moving loop markers with their frame images.
+    void SwapFrames(int a, int b);
+
+    // Delete several frames at once (indices in any order; duplicates and
+    // out-of-range entries ignored). Always keeps at least one frame.
+    void DeleteFrames(const std::vector<int> &indices);
+
+    // Duplicate several frames at once: the copies are inserted as a block
+    // right after the highest index, in index order. Returns the index of the
+    // first copy, or -1 if nothing was duplicated.
+    int DuplicateFrames(const std::vector<int> &indices);
+
+    // Insert a block of frames starting at idx, stopping cleanly at the frame
+    // cap. Returns how many were inserted.
+    int InsertFrames(int idx, const std::vector<CanvasFrame> &newFrames);
+
+    // Move the given frames one step left (dir = -1) or right (+1), keeping
+    // their relative order; frames already against an edge stay put and block
+    // the ones behind them. Loop markers and the current frame follow their
+    // images. Returns the frames' new indices (sorted).
+    std::vector<int> MoveFrames(const std::vector<int> &indices, int dir);
+
+    // Reverse the order of the images occupying the given indices (the slots
+    // themselves stay; a scattered set reverses across its own slots). Loop
+    // markers and the current frame follow their images.
+    void ReverseFrames(const std::vector<int> &indices);
     CanvasFrame &CurrentFrame();
     const CanvasFrame &CurrentFrame() const;
 
@@ -106,11 +140,15 @@ struct Canvas
     // Clear all LED positions in a specific panel to black, on the current frame.
     void ClearPanel(int panel);
 
+    // Clear all LED positions in a specific panel to black, on one frame.
+    void ClearPanel(int panel, int frameIndex);
+
     // Clear a specific panel to black across every frame.
     void ClearPanelAllFrames(int panel);
 
-    // Apply an HSV adjustment to every LED in a frame.
-    void AdjustHsv(int frame_index, const struct HsvAdjust &adj);
+    // Apply an HSV adjustment to a frame's LEDs. panelMask selects which
+    // panels are touched (bit p = panel p); the default covers all nine.
+    void AdjustHsv(int frame_index, const struct HsvAdjust &adj, uint16_t panelMask = 0x1FF);
 
     // Clear all LED positions in all panels to black.
     void ClearAll();

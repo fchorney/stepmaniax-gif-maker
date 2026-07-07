@@ -106,6 +106,15 @@ set(HIDAPI_INCLUDE_WRAPPER "${CMAKE_CURRENT_BINARY_DIR}/hidapi-include")
 file(MAKE_DIRECTORY "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
 file(GLOB HIDAPI_HEADERS "${hidapi_SOURCE_DIR}/hidapi/*.h")
 file(COPY ${HIDAPI_HEADERS} DESTINATION "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
+# The platform backend headers live next to their backends in the source tree,
+# but an installed hidapi puts them all in one include/hidapi/ directory, and
+# SDK >= 1.4.0 includes <hidapi/hidapi_darwin.h> on macOS. Mirror that layout.
+file(GLOB HIDAPI_PLATFORM_HEADERS
+    "${hidapi_SOURCE_DIR}/mac/hidapi_darwin.h"
+    "${hidapi_SOURCE_DIR}/windows/hidapi_winapi.h"
+    "${hidapi_SOURCE_DIR}/linux/hidapi_hidraw.h"
+    "${hidapi_SOURCE_DIR}/libusb/hidapi_libusb.h")
+file(COPY ${HIDAPI_PLATFORM_HEADERS} DESTINATION "${HIDAPI_INCLUDE_WRAPPER}/hidapi")
 set(HIDAPI_INCLUDE_DIRS "${HIDAPI_INCLUDE_WRAPPER}")
 set(HIDAPI_LIBRARY_DIRS "")
 # Skip pkg-config search in the SDK (HIDAPI_FOUND is already set)
@@ -134,6 +143,19 @@ endif()
 add_executable(stepmaniax-gif-maker ${APP_SOURCES})
 target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(stepmaniax-gif-maker PRIVATE SMX_GIF_MAKER_VERSION="${PROJECT_VERSION}")
+
+# Build identifier (git branch @ short hash) for the About dialog, regenerated
+# on every build so it always matches the checked-out commit.
+set(BUILD_INFO_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/build_info.h)
+add_custom_target(gifmaker_build_info
+    COMMAND ${CMAKE_COMMAND}
+        -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+        -DOUT_FILE=${BUILD_INFO_HEADER}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateBuildInfo.cmake
+    BYPRODUCTS ${BUILD_INFO_HEADER}
+    COMMENT "Refreshing build_info.h")
+add_dependencies(stepmaniax-gif-maker gifmaker_build_info)
+target_include_directories(stepmaniax-gif-maker PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(stepmaniax-gif-maker PRIVATE imgui_lib smx-mp nlohmann_json::nlohmann_json)
 
 # When linking smx-mp statically on Windows, prevent dllimport decoration
@@ -166,9 +188,11 @@ if(GIFMAKER_BUILD_TESTS)
         tests/test_main.cpp
         tests/test_canvas_geometry.cpp
         tests/test_gif_roundtrip.cpp
+        tests/test_undo.cpp
         src/canvas.cpp
         src/gif_export.cpp
         src/gif_import.cpp
+        src/undo.cpp
     )
     target_include_directories(gifmaker_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(gifmaker_tests PRIVATE doctest_header)

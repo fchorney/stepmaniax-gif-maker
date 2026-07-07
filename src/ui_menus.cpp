@@ -2,6 +2,8 @@
 #include "ui_menus.h"
 #include "gif_export.h"
 #include "gif_import.h"
+#include "imgui_internal.h" // g.NavCursorVisible for the modal Enter-confirm fallback
+#include "build_info.h"
 #include <SMX.h>
 #include <cstdio>
 #include <algorithm>
@@ -15,6 +17,7 @@ using namespace std;
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_exportPath = filelist[0];
@@ -25,6 +28,7 @@ static void ExportDialogCallback(void *userdata, const char * const *filelist, i
 static void ImportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_importPath = filelist[0];
@@ -35,6 +39,7 @@ static void ImportDialogCallback(void *userdata, const char * const *filelist, i
 static void CompositeRelCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositeRelPath = filelist[0]; g_compositeRelRequested = true; }
 }
@@ -42,20 +47,76 @@ static void CompositeRelCallback(void *userdata, const char * const *filelist, i
 static void CompositePrsCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositePrsPath = filelist[0]; g_compositePrsRequested = true; }
 }
 
+// Enter (or keypad Enter) confirms a modal's default action, but only while
+// the nav cursor is hidden: once arrow keys move the visible focus to some
+// button, Enter and Space go to that button through ImGui's own navigation.
+// (ImGui hides the nav cursor again on any mouse click, so a mouse-opened
+// dialog otherwise ignores Enter entirely.)
+// True while ImGui's own keyboard navigation owns Enter/Space activation,
+// which requires BOTH a focused item and a visible nav cursor (the exact
+// precondition of its activation path). Anything less (e.g. the cursor
+// flagged visible with no item focused, which happens a few frames after a
+// modal takes focus) means nobody would handle the key.
+static bool NavOwnsActivation()
+{
+    ImGuiContext &g = *ImGui::GetCurrentContext();
+    return g.NavId != 0 && g.NavCursorVisible && g.NavWindow
+           && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs);
+}
+
+static bool ModalDefaultConfirm()
+{
+    if (ImGui::GetIO().WantTextInput || NavOwnsActivation())
+        return false;
+    return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
+           || ImGui::IsKeyPressed(ImGuiKey_Space, false);
+}
+
+// Outline the last item (a modal's default button) in the nav-highlight
+// colour while Enter/Space would press it via ModalDefaultConfirm. Hidden as
+// soon as arrow keys move ImGui's own visible focus, which then owns the keys
+// and draws its own highlight.
+static void ModalDefaultHint()
+{
+    if (NavOwnsActivation())
+        return;
+    ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    ImGui::GetWindowDrawList()->AddRect(
+        ImVec2(mn.x - 3.0f, mn.y - 3.0f), ImVec2(mx.x + 3.0f, mx.y + 3.0f),
+        ImGui::GetColorU32(ImGuiCol_NavCursor), ImGui::GetStyle().FrameRounding + 2.0f, 0, 2.0f);
+}
+
+// Escape cancels/dismisses a modal. ImGui itself deliberately never closes
+// modal popups on Escape, so each dialog wires this into its cancel action.
+// Skipped while a text field is active: Escape then reverts the field's edit.
+static bool ModalCancelPressed()
+{
+    return !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+}
+
 static void UploadProgressCb(int progress, void *pUser)
 {
-    (void)pUser;
-    g_uploadProgress.store(progress);
+    // pUser carries the pad index; each pad reports into its own slot so a
+    // Both Pads upload is only complete when the slower pad finishes.
+    int pad = (int)(intptr_t)pUser;
+    g_uploadProgress[pad == 1 ? 1 : 0].store(progress);
 }
 
 void RenderMenus(AppState &app, SDL_Window *window)
 {
     ImGuiIO &io = ImGui::GetIO();
     static bool showAbout = false;
+    // Save/export result state, declared up here so the direct Save paths
+    // (File > Save, Ctrl+S) can report write failures through the same dialog.
+    static string exportError;
+    static bool showExportResult = false;
+    static bool exportSuccess = false;
+    static string compositeError;
 
     // Deferred file open dialog (needs to happen after popups close)
     if (app.deferOpenDialog)
@@ -168,11 +229,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 else
                 {
-                    string err;
-                    if (ExportGif(app.canvas, app.currentFilePath, err))
+                    if (ExportGif(app.canvas, app.currentFilePath, exportError))
                     {
                         app.dirty = false;
                         app.undo.MarkSaved();
+                    }
+                    else
+                    {
+                        exportSuccess = false;
+                        showExportResult = true;
                     }
                 }
             }
@@ -203,28 +268,55 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         if (ImGui::BeginMenu("Edit"))
         {
-            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
             ImGui::Separator();
-            if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
+            // Single-frame edits apply to every selected frame when the
+            // timeline has a multi-selection.
+            bool multiSel = app.HasMultiSelection();
+            if (ImGui::MenuItem(multiSel ? "Copy Frames" : "Copy Frame", SHORTCUT_MOD "+C"))
             {
-                app.frameClipboard = app.canvas.CurrentFrame();
-                app.frameClipboardValid = true;
+                app.frameClipboard.clear();
+                for (int fi : app.SelectionOrCurrent())
+                    app.frameClipboard.push_back(app.canvas.frames[fi]);
             }
-            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
+            if (ImGui::MenuItem(app.frameClipboard.size() > 1 ? "Paste Frames" : "Paste Frame", SHORTCUT_MOD "+V", false, app.CanPasteFrames()))
             {
-                app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
-                app.canvas.currentFrame++;
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+                int first = app.canvas.currentFrame + 1;
+                int count = app.canvas.InsertFrames(first, app.frameClipboard);
+                app.ClearFrameSelection();
+                for (int i = first; i < first + count && count > 1; i++)
+                    app.selectedFrames.push_back(i);
+                app.selectAnchor = first;
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
+            }
+            // Reverse the selected frames, or the whole animation without a
+            // multi-selection.
+            if (ImGui::MenuItem(multiSel ? "Reverse Frames (Selected)" : "Reverse Frames (All)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.reverseFrames), false, multiSel || (int)app.canvas.frames.size() > 1))
+            {
+                std::vector<int> rev;
+                if (multiSel)
+                    rev = app.SelectionOrCurrent();
+                else
+                    for (int i = 0; i < (int)app.canvas.frames.size(); i++) rev.push_back(i);
+                app.canvas.ReverseFrames(rev);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Reverse Frames (Selected)" : "Reverse Frames");
             }
             ImGui::Separator();
-            if (ImGui::BeginMenu("Clear Panel"))
+            if (ImGui::BeginMenu(multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel"))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[16];
                     snprintf(label, sizeof(label), "Panel %d", p);
-                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanel(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel"); }
+                    if (ImGui::MenuItem(label))
+                    {
+                        for (int fi : app.SelectionOrCurrent()) app.canvas.ClearPanel(p, fi);
+                        app.dirty = true; app.colorCountsDirty = true;
+                        app.undo.SaveState(app.canvas, multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel");
+                    }
                 }
                 ImGui::EndMenu();
             }
@@ -238,7 +330,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
+            if (ImGui::MenuItem(multiSel ? "Clear All Panels (Selected Frames)" : "Clear All Panels"))
+            {
+                for (int fi : app.SelectionOrCurrent())
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        app.canvas.ClearPanel(p, fi);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Clear All (Selected Frames)" : "Clear All");
+            }
             if (ImGui::BeginMenu("Quantize Panel", app.canvas.target == CanvasTarget::Firmware))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++)
@@ -255,7 +354,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) app.showHsvDialog = true;
+            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) { app.hsvDialogPanelMask = 0x1FF; app.showHsvDialog = true; }
             ImGui::Separator();
             // Convert between LED densities. Modern packs 25 LEDs/panel (outer 4x4
             // ring + inner 3x3); Legacy has only the outer 16. Modern->Legacy drops
@@ -418,10 +517,22 @@ void RenderMenus(AppState &app, SDL_Window *window)
                     }
                     if (ok)
                     {
+                        // Stop any pad preview and hand the lights back, so
+                        // the pad plays the uploaded animation as soon as the
+                        // transfer lands and it can be verified immediately.
+                        if (app.livePreview || app.compositePreview)
+                        {
+                            app.livePreview = false;
+                            app.compositePreview = false;
+                            SMX_ReenableAutoLights();
+                        }
                         app.uploadInProgress = true;
-                        g_uploadProgress.store(0);
-                        if (pad0) SMX_LightsUpload_BeginUpload(0, UploadProgressCb, nullptr);
-                        if (pad1) SMX_LightsUpload_BeginUpload(1, UploadProgressCb, nullptr);
+                        app.uploadPad0Active = pad0;
+                        app.uploadPad1Active = pad1;
+                        g_uploadProgress[0].store(0);
+                        g_uploadProgress[1].store(0);
+                        if (pad0) SMX_LightsUpload_BeginUpload(0, UploadProgressCb, (void*)(intptr_t)0);
+                        if (pad1) SMX_LightsUpload_BeginUpload(1, UploadProgressCb, (void*)(intptr_t)1);
                     }
                     else
                         app.showUploadDialog = true;
@@ -495,6 +606,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::Text("Keybindings");
         ImGui::Separator();
 
+        // Whether a key capture was armed at the top of the frame: a key that
+        // completes or cancels the capture (inside KeybindRow, which renders
+        // before the Close button) must not also confirm/close the dialog.
+        bool captureWasArmed = (rebindTarget != nullptr);
+
         auto KeybindRow = [&](const char *label, int *key) {
             ImGui::Text("%s:", label);
             ImGui::SameLine(120);
@@ -504,6 +620,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 for (int k = ImGuiKey_NamedKey_BEGIN; k < ImGuiKey_NamedKey_END; k++)
                 {
                     if (k == ImGuiKey_Escape) continue;
+                    // Real keyboard keys only: a stray click must not bind
+                    // MouseLeft, and a bare modifier would fight the
+                    // no-modifier gate on the timeline shortcuts.
+                    if (!ImGui::IsKeyboardKey((ImGuiKey)k) || ImGui::IsLRModKey((ImGuiKey)k)) continue;
                     if (ImGui::IsKeyPressed((ImGuiKey)k))
                     {
                         *key = k;
@@ -545,6 +665,30 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Shift Left", &app.prefs.keys.shiftLeft);
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
         KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
+        KeybindRow("Reverse Frames", &app.prefs.keys.reverseFrames);
+
+        // Two actions on the same key means one of them silently never fires.
+        {
+            struct Bind { const char *name; int key; };
+            const Bind binds[] = {
+                {"Draw", app.prefs.keys.draw}, {"Erase", app.prefs.keys.erase},
+                {"Fill", app.prefs.keys.fill}, {"Replace", app.prefs.keys.replace},
+                {"Pick Color", app.prefs.keys.pick}, {"Play/Pause", app.prefs.keys.playPause},
+                {"Prev Frame", app.prefs.keys.prevFrame}, {"Next Frame", app.prefs.keys.nextFrame},
+                {"First Frame", app.prefs.keys.firstFrame}, {"Last Frame", app.prefs.keys.lastFrame},
+                {"Add Frame", app.prefs.keys.addFrame}, {"Dup Frame", app.prefs.keys.dupFrame},
+                {"Delete Frame", app.prefs.keys.deleteFrame}, {"Shift Left", app.prefs.keys.shiftLeft},
+                {"Shift Right", app.prefs.keys.shiftRight}, {"Hold Sim", app.prefs.keys.holdSim},
+                {"Reverse Frames", app.prefs.keys.reverseFrames},
+            };
+            const int n = (int)(sizeof(binds) / sizeof(binds[0]));
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                    if (binds[i].key == binds[j].key)
+                        ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1),
+                            "Warning: %s and %s share the key %s",
+                            binds[i].name, binds[j].name, ImGui::GetKeyName((ImGuiKey)binds[i].key));
+        }
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
@@ -573,11 +717,13 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         ImGui::Separator();
         ImGui::SameLine();
-        if (ImGui::Button("Close"))
+        if (ImGui::Button("Close") || (!captureWasArmed && rebindTarget == nullptr && (ModalDefaultConfirm() || ModalCancelPressed())))
         {
             rebindTarget = nullptr;
             ImGui::CloseCurrentPopup();
         }
+        if (rebindTarget == nullptr)
+            ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -592,16 +738,27 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     static bool hsvInit = false;
     static std::vector<CanvasFrame> hsvSnapshot;
+    static std::vector<int> hsvSelection;
     static int hsvFrame = 0;
     static HsvAdjust hsvAdj;
-    static bool hsvAllFrames = false;
+    enum { HsvScope_Current = 0, HsvScope_Selected, HsvScope_All };
+    static int hsvScope = HsvScope_Current;
+    static uint16_t hsvMask = 0x1FF;
     if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         if (!hsvInit)
         {
             hsvSnapshot = app.canvas.frames;
+            hsvSelection = app.SelectionOrCurrent();
             hsvFrame = app.canvas.currentFrame;
             hsvAdj = HsvAdjust{};
+            // Default the scope to the timeline selection; never leave a stale
+            // "selected" scope active without one.
+            if (app.HasMultiSelection())
+                hsvScope = HsvScope_Selected;
+            else if (hsvScope == HsvScope_Selected)
+                hsvScope = HsvScope_Current;
+            hsvMask = (app.canvas.PanelCount() == 1) ? 0x1 : app.hsvDialogPanelMask;
             hsvInit = true;
         }
 
@@ -621,31 +778,80 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SetNextItemWidth(220);
         ImGui::SliderFloat("Value +/-", &hsvAdj.val_add, -1.0f, 1.0f, "%+.2f");
         ImGui::Spacing();
-        ImGui::Checkbox("All frames", &hsvAllFrames);
+        ImGui::TextDisabled("Apply to:");
+        ImGui::SameLine();
+        ImGui::RadioButton("Current frame", &hsvScope, HsvScope_Current);
+        ImGui::SameLine();
+        bool hasSelection = hsvSelection.size() > 1;
+        if (!hasSelection) ImGui::BeginDisabled();
+        ImGui::RadioButton("Selected frames", &hsvScope, HsvScope_Selected);
+        if (!hasSelection) ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::RadioButton("All frames", &hsvScope, HsvScope_All);
         ImGui::SameLine();
         if (ImGui::SmallButton("Reset"))
             hsvAdj = HsvAdjust{};
 
+        // Panel scope: a 3x3 grid of checkboxes mirroring the pad layout.
+        if (app.canvas.PanelCount() > 1)
+        {
+            ImGui::Spacing();
+            ImGui::TextDisabled("Panels:");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("All##hsvpanels")) hsvMask = 0x1FF;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("None##hsvpanels")) hsvMask = 0;
+            for (int row = 0; row < 3; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    int p = row * 3 + col;
+                    if (col > 0) ImGui::SameLine();
+                    char lbl[16];
+                    snprintf(lbl, sizeof(lbl), "%d##hsvp%d", p, p);
+                    bool on = (hsvMask >> p) & 1;
+                    if (ImGui::Checkbox(lbl, &on))
+                        hsvMask = on ? (uint16_t)(hsvMask | (1u << p))
+                                     : (uint16_t)(hsvMask & ~(1u << p));
+                }
+            }
+        }
+
         // Recompute the preview from the snapshot every frame.
         app.canvas.frames = hsvSnapshot;
-        if (hsvAllFrames)
+        if (hsvScope == HsvScope_All)
             for (int i = 0; i < (int)app.canvas.frames.size(); i++)
-                app.canvas.AdjustHsv(i, hsvAdj);
+                app.canvas.AdjustHsv(i, hsvAdj, hsvMask);
+        else if (hsvScope == HsvScope_Selected)
+            for (int i : hsvSelection)
+                app.canvas.AdjustHsv(i, hsvAdj, hsvMask);
         else
-            app.canvas.AdjustHsv(hsvFrame, hsvAdj);
+            app.canvas.AdjustHsv(hsvFrame, hsvAdj, hsvMask);
         app.colorCountsDirty = true;
 
         ImGui::Separator();
-        if (ImGui::Button("Apply"))
+        bool noPanels = (hsvMask == 0);
+        if (noPanels) ImGui::BeginDisabled();
+        if (ImGui::Button("Apply") || (!noPanels && ModalDefaultConfirm()))
         {
+            bool allPanels = (app.canvas.PanelCount() == 1) || hsvMask == 0x1FF;
             app.dirty = true;
             app.colorCountsDirty = true;
-            app.undo.SaveState(app.canvas, hsvAllFrames ? "Adjust HSV (all frames)" : "Adjust HSV");
+            const char *label =
+                hsvScope == HsvScope_All
+                    ? (allPanels ? "Adjust HSV (all frames)" : "Adjust HSV (panels, all frames)")
+                : hsvScope == HsvScope_Selected
+                    ? (allPanels ? "Adjust HSV (selected frames)" : "Adjust HSV (panels, selected frames)")
+                    : (allPanels ? "Adjust HSV" : "Adjust HSV (panels)");
+            app.undo.SaveState(app.canvas, label);
             hsvInit = false;
             ImGui::CloseCurrentPopup();
         }
+        if (noPanels) ImGui::EndDisabled();
+        if (!noPanels)
+            ModalDefaultHint();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
         {
             app.canvas.frames = hsvSnapshot;
             app.colorCountsDirty = true;
@@ -654,12 +860,17 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         ImGui::EndPopup();
     }
+    else if (hsvInit)
+    {
+        // Dismissed without Apply or Cancel (e.g. Escape): revert the live
+        // preview exactly like Cancel, or it stays baked into the canvas
+        // without an undo entry.
+        app.canvas.frames = hsvSnapshot;
+        app.colorCountsDirty = true;
+        hsvInit = false;
+    }
 
     // --- GIF Export handling ---
-    static string exportError;
-    static bool showExportResult = false;
-    static bool exportSuccess = false;
-
     if (g_exportRequested)
     {
         g_exportRequested = false;
@@ -691,7 +902,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "Some panels exceed the 15-color limit:");
         ImGui::BeginChild("##colorwarn", ImVec2(300, 150), true);
         for (int p = 0; p < 9; p++)
@@ -720,9 +930,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -733,14 +944,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Save Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (exportSuccess)
             ImGui::Text("GIF saved successfully!");
         else
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Save failed: %s", exportError.c_str());
-        if (ImGui::Button("OK"))
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -752,7 +963,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("You have unsaved changes. Discard them?");
         ImGui::Separator();
         if (ImGui::Button("Discard"))
@@ -773,12 +983,13 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.running = false;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button("Cancel") || ModalDefaultConfirm() || ModalCancelPressed())
         {
             app.pendingAction = Pending_None;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -797,6 +1008,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.currentFilePath = g_importPath;
             app.prefs.AddRecentFile(g_importPath);
             app.showExportWarning = false;
+            app.ClearFrameSelection();
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Open");
             app.colorCountsDirty = true;
@@ -820,11 +1032,11 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("Import Result", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Import failed: %s", importError.c_str());
-        if (ImGui::Button("OK"))
+        if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
             ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -833,10 +1045,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         ImGui::OpenPopup("Composite Preview");
         app.showCompositeDialog = false;
+        compositeError.clear();
     }
     if (ImGui::BeginPopupModal("Composite Preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
 
         ImGui::Text("Released Animation:");
         ImGui::SameLine();
@@ -853,8 +1065,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##rel"))
         {
-            app.compositeReleased = app.canvas;
-            app.compositeReleasedLoaded = true;
+            if (app.canvas.extent != CanvasExtent::FullPad)
+                compositeError = "Composite preview needs full-pad GIFs.";
+            else if (app.compositePressedLoaded && app.canvas.mode != app.compositePressed.mode)
+                compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+            else
+            {
+                app.compositeReleased = app.canvas;
+                app.compositeReleasedLoaded = true;
+                app.compositeRelFrame = 0;
+                app.compositeFrameTime = 0;
+                compositeError.clear();
+            }
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
@@ -874,8 +1096,18 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SameLine();
         if (ImGui::Button("Use Current GIF##prs"))
         {
-            app.compositePressed = app.canvas;
-            app.compositePressedLoaded = true;
+            if (app.canvas.extent != CanvasExtent::FullPad)
+                compositeError = "Composite preview needs full-pad GIFs.";
+            else if (app.compositeReleasedLoaded && app.canvas.mode != app.compositeReleased.mode)
+                compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+            else
+            {
+                app.compositePressed = app.canvas;
+                app.compositePressedLoaded = true;
+                app.compositePrsFrame = 0;
+                app.compositePrsFrameTime = 0;
+                compositeError.clear();
+            }
         }
         if (ImGui::BeginItemTooltip()) { ImGui::Text("Use the GIF currently open in the editor"); ImGui::EndTooltip(); }
 
@@ -884,6 +1116,9 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::Checkbox("Fill black pixels (fully replace released)", &app.compositeFillBlack);
             if (ImGui::BeginItemTooltip()) { ImGui::Text("Black pixels become opaque instead of transparent\nso pressed animation fully covers released"); ImGui::EndTooltip(); }
         }
+
+        if (!compositeError.empty())
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s", compositeError.c_str());
 
         ImGui::Separator();
         if (!app.compositePreview)
@@ -913,7 +1148,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             ImGui::TextColored(ImVec4(0, 1, 0, 1), "Playing...");
         }
         ImGui::SameLine();
-        if (ImGui::Button("Close", ImVec2(80, 0)))
+        if (ImGui::Button("Close", ImVec2(80, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             if (app.compositePreview)
             {
@@ -922,6 +1157,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 
@@ -934,35 +1170,30 @@ void RenderMenus(AppState &app, SDL_Window *window)
     if (app.uploadInProgress)
     {
         ImGui::OpenPopup("Upload");
-        app.uploadProgress = g_uploadProgress.load();
+        // Overall progress = the slower pad; complete only when both are done.
+        int progress = 100;
+        if (app.uploadPad0Active) progress = std::min(progress, g_uploadProgress[0].load());
+        if (app.uploadPad1Active) progress = std::min(progress, g_uploadProgress[1].load());
+        app.uploadProgress = progress;
         if (app.uploadProgress >= 100)
             app.uploadInProgress = false;
     }
     if (ImGui::BeginPopupModal("Upload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         if (!app.uploadError.empty())
         {
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Upload failed: %s", app.uploadError.c_str());
-            if (ImGui::Button("OK"))
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
+            ModalDefaultHint();
         }
         else if (app.uploadProgress >= 100)
         {
-            static bool uploadFocusSet = false;
             ImGui::Text("Upload complete!");
-            if (ImGui::Button("OK"))
-            {
-                uploadFocusSet = false;
+            if (ImGui::Button("OK") || ModalDefaultConfirm() || ModalCancelPressed())
                 ImGui::CloseCurrentPopup();
-            }
-            if (!uploadFocusSet)
-            {
-                ImGui::SetKeyboardFocusHere(-1);
-                ImGui::SetNavCursorVisible(true);
-                uploadFocusSet = true;
-            }
+            ModalDefaultHint();
         }
         else
         {
@@ -980,7 +1211,6 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     if (ImGui::BeginPopupModal("New Animation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::IsWindowAppearing()) ImGui::SetNavCursorVisible(true);
         ImGui::Text("Create a new animation. This will discard current work.");
         ImGui::Separator();
         static int newMode = 1;   // 0 = Legacy, 1 = Modern
@@ -1005,7 +1235,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (!firmwareAllowed)
             ImGui::TextDisabled("Only a Modern full pad can upload to firmware.");
         ImGui::Separator();
-        if (ImGui::Button("Create"))
+        if (ImGui::Button("Create") || ModalDefaultConfirm())
         {
             CanvasMode newCanvasMode = newMode == 1 ? CanvasMode::Modern : CanvasMode::Legacy;
             CanvasExtent newCanvasExtent = newExtent == 1 ? CanvasExtent::SinglePanel : CanvasExtent::FullPad;
@@ -1018,14 +1248,16 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.canvas.Init(newCanvasMode, newCanvasExtent, newCanvasTarget);
             app.currentFilePath.clear();
             app.dirty = false; app.undo.MarkSaved();
+            app.ClearFrameSelection();
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Initial");
             ImGui::CloseCurrentPopup();
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
-            ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
+        ModalDefaultHint();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ModalCancelPressed())
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
@@ -1034,15 +1266,41 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         g_compositeRelRequested = false;
         string err;
-        if (ImportGif(g_compositeRelPath, app.compositeReleased, err))
+        Canvas loaded;
+        if (!ImportGif(g_compositeRelPath, loaded, err))
+            compositeError = "Released: " + err;
+        else if (loaded.extent != CanvasExtent::FullPad)
+            compositeError = "Released GIF must be a full pad (23x24 or 14x15).";
+        else if (app.compositePressedLoaded && loaded.mode != app.compositePressed.mode)
+            compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+        else
+        {
+            app.compositeReleased = std::move(loaded);
             app.compositeReleasedLoaded = true;
+            app.compositeRelFrame = 0;
+            app.compositeFrameTime = 0;
+            compositeError.clear();
+        }
     }
     if (g_compositePrsRequested)
     {
         g_compositePrsRequested = false;
         string err;
-        if (ImportGif(g_compositePrsPath, app.compositePressed, err))
+        Canvas loaded;
+        if (!ImportGif(g_compositePrsPath, loaded, err))
+            compositeError = "Pressed: " + err;
+        else if (loaded.extent != CanvasExtent::FullPad)
+            compositeError = "Pressed GIF must be a full pad (23x24 or 14x15).";
+        else if (app.compositeReleasedLoaded && loaded.mode != app.compositeReleased.mode)
+            compositeError = "Released and pressed GIFs must both be Modern or both Legacy.";
+        else
+        {
+            app.compositePressed = std::move(loaded);
             app.compositePressedLoaded = true;
+            app.compositePrsFrame = 0;
+            app.compositePrsFrameTime = 0;
+            compositeError.clear();
+        }
     }
 
     // --- Keyboard Shortcuts (only when not typing and no popup open) ---
@@ -1054,20 +1312,26 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.replace)) app.tool = Tool_Replace;
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.pick)) app.tool = Tool_Pick;
 
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) app.showHsvDialog = true;
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) { app.hsvDialogPanelMask = 0x1FF; app.showHsvDialog = true; }
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {
-            app.frameClipboard = app.canvas.CurrentFrame();
-            app.frameClipboardValid = true;
+            app.frameClipboard.clear();
+            for (int fi : app.SelectionOrCurrent())
+                app.frameClipboard.push_back(app.canvas.frames[fi]);
         }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.CanPasteFrames())
         {
-            app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
-            app.canvas.currentFrame++;
-            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+            int first = app.canvas.currentFrame + 1;
+            int count = app.canvas.InsertFrames(first, app.frameClipboard);
+            app.ClearFrameSelection();
+            for (int i = first; i < first + count && count > 1; i++)
+                app.selectedFrames.push_back(i);
+            app.selectAnchor = first;
+            app.dirty = true; app.colorCountsDirty = true;
+            app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
         }
 
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
@@ -1086,11 +1350,15 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             else
             {
-                string err;
-                if (ExportGif(app.canvas, app.currentFilePath, err))
+                if (ExportGif(app.canvas, app.currentFilePath, exportError))
                 {
                     app.dirty = false;
                     app.undo.MarkSaved();
+                }
+                else
+                {
+                    exportSuccess = false;
+                    showExportResult = true;
                 }
             }
         }
@@ -1142,6 +1410,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     {
         ImGui::Text("StepManiaX GIF Maker");
         ImGui::Text("Version %s", SMX_GIF_MAKER_VERSION);
+        ImGui::TextDisabled("Build: %s", SMX_GIF_MAKER_BUILD);
         ImGui::Separator();
         ImGui::Text("Created by Fernando Chorney");
         ImGui::Spacing();
@@ -1162,11 +1431,12 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::TextLink("github.com/fchorney/stepmaniax-gif-maker"))
             SDL_OpenURL("https://github.com/fchorney/stepmaniax-gif-maker");
         ImGui::Spacing();
-        if (ImGui::Button("Close", ImVec2(120, 0)))
+        if (ImGui::Button("Close", ImVec2(120, 0)) || ModalDefaultConfirm() || ModalCancelPressed())
         {
             showAbout = false;
             ImGui::CloseCurrentPopup();
         }
+        ModalDefaultHint();
         ImGui::EndPopup();
     }
 }
