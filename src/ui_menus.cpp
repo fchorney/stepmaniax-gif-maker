@@ -16,6 +16,7 @@ using namespace std;
 static void ExportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_exportPath = filelist[0];
@@ -26,6 +27,7 @@ static void ExportDialogCallback(void *userdata, const char * const *filelist, i
 static void ImportDialogCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     {
         g_importPath = filelist[0];
@@ -36,6 +38,7 @@ static void ImportDialogCallback(void *userdata, const char * const *filelist, i
 static void CompositeRelCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositeRelPath = filelist[0]; g_compositeRelRequested = true; }
 }
@@ -43,6 +46,7 @@ static void CompositeRelCallback(void *userdata, const char * const *filelist, i
 static void CompositePrsCallback(void *userdata, const char * const *filelist, int filter)
 {
     (void)userdata; (void)filter;
+    g_fileDialogClosed = true;
     if (filelist && filelist[0] && filelist[0][0] != '\0')
     { g_compositePrsPath = filelist[0]; g_compositePrsRequested = true; }
 }
