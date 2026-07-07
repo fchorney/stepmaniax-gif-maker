@@ -33,28 +33,36 @@ void Canvas::Init(CanvasMode m, CanvasExtent e, CanvasTarget t)
 
 void Canvas::AddFrame()
 {
-    if ((int)frames.size() >= MaxFrames()) return;
     CanvasFrame f;
     f.pixels.resize(Width() * Height(), Color{0, 0, 0});
     if (frames.empty())
     {
         frames.push_back(std::move(f));
         currentFrame = 0;
+        return;
     }
-    else
-    {
-        frames.insert(frames.begin() + currentFrame + 1, std::move(f));
-        currentFrame++;
-    }
+    InsertFrame(currentFrame + 1, f);
 }
 
 void Canvas::DuplicateFrame(int idx)
 {
-    if ((int)frames.size() >= MaxFrames()) return;
     if (idx < 0 || idx >= (int)frames.size()) return;
     CanvasFrame copy = frames[idx];
-    frames.insert(frames.begin() + idx + 1, std::move(copy));
-    currentFrame = idx + 1;
+    InsertFrame(idx + 1, copy);
+}
+
+void Canvas::InsertFrame(int idx, const CanvasFrame &frame)
+{
+    if ((int)frames.size() >= MaxFrames()) return;
+    if (idx < 0) idx = 0;
+    if (idx > (int)frames.size()) idx = (int)frames.size();
+    frames.insert(frames.begin() + idx, frame);
+    currentFrame = idx;
+    // Markers at or after the insertion point shift right with their frame image.
+    if (loopFrame >= idx)
+        loopFrame++;
+    if (loopEndFrame >= idx)
+        loopEndFrame++;
 }
 
 void Canvas::DeleteFrame(int idx)
@@ -64,10 +72,34 @@ void Canvas::DeleteFrame(int idx)
     frames.erase(frames.begin() + idx);
     if (currentFrame >= (int)frames.size())
         currentFrame = (int)frames.size() - 1;
-    if (loopFrame >= (int)frames.size())
+
+    // Markers after the deleted frame shift left with their frame image. A loop
+    // start on the deleted frame moves to the next frame (same index); a loop
+    // end on it shrinks to the previous frame, clearing if the region vanishes.
+    if (loopFrame > idx)
+        loopFrame--;
+    else if (loopFrame >= (int)frames.size())
         loopFrame = (int)frames.size() - 1;
-    if (loopEndFrame >= (int)frames.size())
-        loopEndFrame = (int)frames.size() - 1;
+    if (loopEndFrame >= idx)
+        loopEndFrame--;
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        loopEndFrame = -1;
+}
+
+void Canvas::SwapFrames(int a, int b)
+{
+    if (a == b) return;
+    if (a < 0 || a >= (int)frames.size()) return;
+    if (b < 0 || b >= (int)frames.size()) return;
+    std::swap(frames[a], frames[b]);
+    if (loopFrame == a) loopFrame = b;
+    else if (loopFrame == b) loopFrame = a;
+    if (loopEndFrame == a) loopEndFrame = b;
+    else if (loopEndFrame == b) loopEndFrame = a;
+    // Following the images can invert the region (e.g. swapping the loop start
+    // past the loop end); keep the region spanning the same frames.
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        std::swap(loopFrame, loopEndFrame);
 }
 
 CanvasFrame &Canvas::CurrentFrame() { return frames[currentFrame]; }

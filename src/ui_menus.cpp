@@ -213,8 +213,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             }
             if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
             {
-                app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
-                app.canvas.currentFrame++;
+                app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
             }
             ImGui::Separator();
@@ -1065,8 +1064,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
         {
-            app.canvas.frames.insert(app.canvas.frames.begin() + app.canvas.currentFrame + 1, app.frameClipboard);
-            app.canvas.currentFrame++;
+            app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
             app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
         }
 

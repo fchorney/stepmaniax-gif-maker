@@ -202,6 +202,7 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - Right-click a frame to set it as the loop point
 - After the last frame plays, the animation loops back to this frame
 - Default loop point is frame 0
+- The loop point and loop-end markers stay on the same frame image when frames are added, duplicated, pasted, deleted, or reordered around them
 
 ### Loop-End Marker (Host Target Only)
 
