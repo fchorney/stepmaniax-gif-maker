@@ -129,6 +129,101 @@ int Canvas::DuplicateFrames(const std::vector<int> &indices)
     return at > firstCopy ? firstCopy : -1;
 }
 
+int Canvas::InsertFrames(int idx, const std::vector<CanvasFrame> &newFrames)
+{
+    if (idx < 0) idx = 0;
+    if (idx > (int)frames.size()) idx = (int)frames.size();
+    int inserted = 0;
+    for (const auto &f : newFrames)
+    {
+        if ((int)frames.size() >= MaxFrames()) break; // stop cleanly at the cap
+        InsertFrame(idx + inserted, f);
+        inserted++;
+    }
+    return inserted;
+}
+
+// Validate, sort, and dedupe a frame index list against the current frame count.
+static std::vector<int> SortedValidIndices(const std::vector<int> &indices, int frameCount)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < frameCount)
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    return sorted;
+}
+
+std::vector<int> Canvas::MoveFrames(const std::vector<int> &indices, int dir)
+{
+    std::vector<int> sorted = SortedValidIndices(indices, (int)frames.size());
+    if (sorted.empty() || (dir != -1 && dir != 1))
+        return sorted;
+
+    // SwapFrames tracks the loop markers; the current frame follows its image
+    // whether it is part of the move or gets hopped over.
+    auto swapFollowingCurrent = [&](int a, int b)
+    {
+        SwapFrames(a, b);
+        if (currentFrame == a) currentFrame = b;
+        else if (currentFrame == b) currentFrame = a;
+    };
+
+    std::vector<int> result;
+    if (dir < 0)
+    {
+        for (int i : sorted)
+        {
+            bool blocked = (i == 0) || (!result.empty() && result.back() == i - 1);
+            if (!blocked)
+                swapFollowingCurrent(i, i - 1);
+            result.push_back(blocked ? i : i - 1);
+        }
+    }
+    else
+    {
+        for (auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+        {
+            int i = *it;
+            bool blocked = (i == (int)frames.size() - 1)
+                           || (!result.empty() && result.back() == i + 1);
+            if (!blocked)
+                swapFollowingCurrent(i, i + 1);
+            result.push_back(blocked ? i : i + 1);
+        }
+        std::reverse(result.begin(), result.end());
+    }
+    return result;
+}
+
+void Canvas::ReverseFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted = SortedValidIndices(indices, (int)frames.size());
+    int n = (int)sorted.size();
+    if (n < 2) return;
+
+    std::vector<CanvasFrame> imgs;
+    for (int i : sorted)
+        imgs.push_back(std::move(frames[i]));
+    for (int k = 0; k < n; k++)
+        frames[sorted[k]] = std::move(imgs[n - 1 - k]);
+
+    // Markers and the current frame follow their images to the mirrored slot.
+    auto remap = [&](int m)
+    {
+        auto it = std::lower_bound(sorted.begin(), sorted.end(), m);
+        if (it == sorted.end() || *it != m) return m;
+        return sorted[n - 1 - (int)(it - sorted.begin())];
+    };
+    loopFrame = remap(loopFrame);
+    if (loopEndFrame >= 0) loopEndFrame = remap(loopEndFrame);
+    currentFrame = remap(currentFrame);
+    // Reversing can invert the loop region; keep it spanning the same frames.
+    if (loopEndFrame >= 0 && loopEndFrame < loopFrame)
+        std::swap(loopFrame, loopEndFrame);
+}
+
 void Canvas::SwapFrames(int a, int b)
 {
     if (a == b) return;

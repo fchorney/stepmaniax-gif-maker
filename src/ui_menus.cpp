@@ -206,21 +206,40 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
             if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
             ImGui::Separator();
-            if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
-            {
-                app.frameClipboard = app.canvas.CurrentFrame();
-                app.frameClipboardValid = true;
-            }
-            if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
-            {
-                app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
-                app.ClearFrameSelection();
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
-            }
-            ImGui::Separator();
             // Single-frame edits apply to every selected frame when the
             // timeline has a multi-selection.
             bool multiSel = app.HasMultiSelection();
+            if (ImGui::MenuItem(multiSel ? "Copy Frames" : "Copy Frame", SHORTCUT_MOD "+C"))
+            {
+                app.frameClipboard.clear();
+                for (int fi : app.SelectionOrCurrent())
+                    app.frameClipboard.push_back(app.canvas.frames[fi]);
+            }
+            if (ImGui::MenuItem(app.frameClipboard.size() > 1 ? "Paste Frames" : "Paste Frame", SHORTCUT_MOD "+V", false, app.CanPasteFrames()))
+            {
+                int first = app.canvas.currentFrame + 1;
+                int count = app.canvas.InsertFrames(first, app.frameClipboard);
+                app.ClearFrameSelection();
+                for (int i = first; i < first + count && count > 1; i++)
+                    app.selectedFrames.push_back(i);
+                app.selectAnchor = first;
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
+            }
+            // Reverse the selected frames, or the whole animation without a
+            // multi-selection.
+            if (ImGui::MenuItem(multiSel ? "Reverse Frames (Selected)" : "Reverse Frames (All)", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.reverseFrames), false, multiSel || (int)app.canvas.frames.size() > 1))
+            {
+                std::vector<int> rev;
+                if (multiSel)
+                    rev = app.SelectionOrCurrent();
+                else
+                    for (int i = 0; i < (int)app.canvas.frames.size(); i++) rev.push_back(i);
+                app.canvas.ReverseFrames(rev);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Reverse Frames (Selected)" : "Reverse Frames");
+            }
+            ImGui::Separator();
             if (ImGui::BeginMenu(multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel"))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++)
@@ -560,6 +579,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         KeybindRow("Shift Left", &app.prefs.keys.shiftLeft);
         KeybindRow("Shift Right", &app.prefs.keys.shiftRight);
         KeybindRow("Hold Sim", &app.prefs.keys.holdSim);
+        KeybindRow("Reverse Frames", &app.prefs.keys.reverseFrames);
 
         ImGui::Separator();
         if (ImGui::Button("Reset Keybinds to Defaults"))
@@ -1135,14 +1155,20 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {
-            app.frameClipboard = app.canvas.CurrentFrame();
-            app.frameClipboardValid = true;
+            app.frameClipboard.clear();
+            for (int fi : app.SelectionOrCurrent())
+                app.frameClipboard.push_back(app.canvas.frames[fi]);
         }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.CanPasteFrames())
         {
-            app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
+            int first = app.canvas.currentFrame + 1;
+            int count = app.canvas.InsertFrames(first, app.frameClipboard);
             app.ClearFrameSelection();
-            app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
+            for (int i = first; i < first + count && count > 1; i++)
+                app.selectedFrames.push_back(i);
+            app.selectAnchor = first;
+            app.dirty = true; app.colorCountsDirty = true;
+            app.undo.SaveState(app.canvas, count > 1 ? "Paste Frames" : "Paste Frame");
         }
 
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
