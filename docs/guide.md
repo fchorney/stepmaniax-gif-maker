@@ -122,7 +122,7 @@ Both operations are undoable.
 
 ### Adjust HSV
 
-Found under **Edit → Adjust HSV**. Opens a dialog to shift hue and adjust the saturation and value of all non-black pixels on the canvas.
+Found under **Edit → Adjust HSV** (or right-click a panel and choose **Adjust HSV This Panel...**). Opens a dialog to shift hue and adjust the saturation and value of all non-black pixels on the canvas.
 
 | Control | Effect |
 |---------|--------|
@@ -134,9 +134,10 @@ Found under **Edit → Adjust HSV**. Opens a dialog to shift hue and adjust the 
 
 The gain+bias model allows dim or near-black pixels to reach full range: use a high gain to stretch low values, then trim with bias as needed.
 
-- **All Frames** checkbox - when checked, applies to every frame; when unchecked, applies to the current frame only.
+- **Apply to** - choose the frame scope: the current frame, the selected frames (when the timeline has a multi-selection), or all frames.
+- **Panels** - a 3x3 grid mirroring the pad layout limits the adjustment to specific panels; **All**/**None** buttons reset it. Opening the dialog from a panel's right-click menu preselects just that panel.
 - Changes are previewed live on the canvas as you drag the sliders.
-- Click **Apply** to commit (creates an undo entry) or **Cancel** to discard.
+- Click **Apply** to commit (creates an undo entry) or **Cancel** to discard. Apply is disabled while no panel is selected.
 
 ### Convert Mode
 

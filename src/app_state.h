@@ -82,6 +82,9 @@ struct AppState
     bool showNewDialog = false;
     bool showExportWarning = false;
     bool showHsvDialog = false;
+    // Panels preselected when the HSV dialog opens (bit p = panel p). Set to a
+    // single bit by "Adjust HSV This Panel..."; all-panels everywhere else.
+    uint16_t hsvDialogPanelMask = 0x1FF;
 
     // Onion skin
     bool onionSkin = false;

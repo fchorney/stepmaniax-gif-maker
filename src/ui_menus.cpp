@@ -270,7 +270,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize All");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) app.showHsvDialog = true;
+            if (ImGui::MenuItem("Adjust HSV...", SHORTCUT_MOD "+E")) { app.hsvDialogPanelMask = 0x1FF; app.showHsvDialog = true; }
             ImGui::Separator();
             // Convert between LED densities. Modern packs 25 LEDs/panel (outer 4x4
             // ring + inner 3x3); Legacy has only the outer 16. Modern->Legacy drops
@@ -612,6 +612,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
     static HsvAdjust hsvAdj;
     enum { HsvScope_Current = 0, HsvScope_Selected, HsvScope_All };
     static int hsvScope = HsvScope_Current;
+    static uint16_t hsvMask = 0x1FF;
     if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         if (!hsvInit)
@@ -626,6 +627,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 hsvScope = HsvScope_Selected;
             else if (hsvScope == HsvScope_Selected)
                 hsvScope = HsvScope_Current;
+            hsvMask = (app.canvas.PanelCount() == 1) ? 0x1 : app.hsvDialogPanelMask;
             hsvInit = true;
         }
 
@@ -659,30 +661,62 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::SmallButton("Reset"))
             hsvAdj = HsvAdjust{};
 
+        // Panel scope: a 3x3 grid of checkboxes mirroring the pad layout.
+        if (app.canvas.PanelCount() > 1)
+        {
+            ImGui::Spacing();
+            ImGui::TextDisabled("Panels:");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("All##hsvpanels")) hsvMask = 0x1FF;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("None##hsvpanels")) hsvMask = 0;
+            for (int row = 0; row < 3; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    int p = row * 3 + col;
+                    if (col > 0) ImGui::SameLine();
+                    char lbl[16];
+                    snprintf(lbl, sizeof(lbl), "%d##hsvp%d", p, p);
+                    bool on = (hsvMask >> p) & 1;
+                    if (ImGui::Checkbox(lbl, &on))
+                        hsvMask = on ? (uint16_t)(hsvMask | (1u << p))
+                                     : (uint16_t)(hsvMask & ~(1u << p));
+                }
+            }
+        }
+
         // Recompute the preview from the snapshot every frame.
         app.canvas.frames = hsvSnapshot;
         if (hsvScope == HsvScope_All)
             for (int i = 0; i < (int)app.canvas.frames.size(); i++)
-                app.canvas.AdjustHsv(i, hsvAdj);
+                app.canvas.AdjustHsv(i, hsvAdj, hsvMask);
         else if (hsvScope == HsvScope_Selected)
             for (int i : hsvSelection)
-                app.canvas.AdjustHsv(i, hsvAdj);
+                app.canvas.AdjustHsv(i, hsvAdj, hsvMask);
         else
-            app.canvas.AdjustHsv(hsvFrame, hsvAdj);
+            app.canvas.AdjustHsv(hsvFrame, hsvAdj, hsvMask);
         app.colorCountsDirty = true;
 
         ImGui::Separator();
+        bool noPanels = (hsvMask == 0);
+        if (noPanels) ImGui::BeginDisabled();
         if (ImGui::Button("Apply"))
         {
+            bool allPanels = (app.canvas.PanelCount() == 1) || hsvMask == 0x1FF;
             app.dirty = true;
             app.colorCountsDirty = true;
-            app.undo.SaveState(app.canvas,
-                hsvScope == HsvScope_All ? "Adjust HSV (all frames)"
-                : hsvScope == HsvScope_Selected ? "Adjust HSV (selected frames)"
-                : "Adjust HSV");
+            const char *label =
+                hsvScope == HsvScope_All
+                    ? (allPanels ? "Adjust HSV (all frames)" : "Adjust HSV (panels, all frames)")
+                : hsvScope == HsvScope_Selected
+                    ? (allPanels ? "Adjust HSV (selected frames)" : "Adjust HSV (panels, selected frames)")
+                    : (allPanels ? "Adjust HSV" : "Adjust HSV (panels)");
+            app.undo.SaveState(app.canvas, label);
             hsvInit = false;
             ImGui::CloseCurrentPopup();
         }
+        if (noPanels) ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
         {
@@ -1097,7 +1131,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) app.showHsvDialog = true;
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) { app.hsvDialogPanelMask = 0x1FF; app.showHsvDialog = true; }
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         {

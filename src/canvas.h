@@ -131,8 +131,9 @@ struct Canvas
     // Clear a specific panel to black across every frame.
     void ClearPanelAllFrames(int panel);
 
-    // Apply an HSV adjustment to every LED in a frame.
-    void AdjustHsv(int frame_index, const struct HsvAdjust &adj);
+    // Apply an HSV adjustment to a frame's LEDs. panelMask selects which
+    // panels are touched (bit p = panel p); the default covers all nine.
+    void AdjustHsv(int frame_index, const struct HsvAdjust &adj, uint16_t panelMask = 0x1FF);
 
     // Clear all LED positions in all panels to black.
     void ClearAll();
