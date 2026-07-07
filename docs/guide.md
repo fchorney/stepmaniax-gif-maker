@@ -423,6 +423,8 @@ All tool and timeline shortcuts are remappable. Click a binding and press the de
 
 On macOS, Ctrl shortcuts use Cmd instead.
 
+In dialogs, **Enter** confirms the default action (highlighted button) and **Esc** cancels; arrow keys move the focus between buttons, and Enter/Space then activate the focused one. Keyboard navigation is active only inside dialogs and menus, so arrow keys and Space never grab buttons in the main editor.
+
 ---
 
 ## Tips & Tricks

@@ -92,7 +92,8 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // NavEnableKeyboard is toggled per-frame in the main loop: dialogs and
+    // menus get keyboard navigation, the main UI does not.
 
     // Set up config directory for imgui.ini
     if (!configDir.empty())
@@ -157,6 +158,15 @@ int main(int, char**)
                     app.running = false;
             }
         }
+
+        // Keyboard nav is for dialogs and menus only. With it always on,
+        // arrow keys move an (often invisible) focus around the main UI and
+        // Space/Enter then activate that widget instead of running their
+        // timeline shortcuts.
+        if (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        else
+            io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
