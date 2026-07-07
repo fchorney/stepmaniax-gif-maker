@@ -342,3 +342,76 @@ TEST_CASE("swapping frames moves loop markers with their images")
     CHECK(c.loopFrame == 1);
     CHECK(c.loopEndFrame == 2);
 }
+
+TEST_CASE("DeleteFrames removes a scattered set in one pass")
+{
+    Canvas c = TaggedCanvas(6);
+    c.loopFrame = 1;
+    c.loopEndFrame = 4;
+
+    // Duplicates and out-of-range entries are ignored.
+    c.DeleteFrames({4, 0, 2, 2, 99, -1});
+    REQUIRE((int)c.frames.size() == 3);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+    CHECK(c.frames[1].duration == doctest::Approx(0.04f));
+    CHECK(c.frames[2].duration == doctest::Approx(0.06f));
+    // Loop start (image .02) slid to index 0; loop end (image .05, deleted)
+    // shrank onto the previous surviving frame (.04, index 1).
+    CHECK(c.loopFrame == 0);
+    CHECK(c.loopEndFrame == 1);
+    // Current frame lands where the first deleted frame was.
+    CHECK(c.currentFrame == 0);
+
+    // Deleting every frame keeps the first one.
+    c.DeleteFrames({0, 1, 2});
+    REQUIRE((int)c.frames.size() == 1);
+    CHECK(c.frames[0].duration == doctest::Approx(0.02f));
+    CHECK(c.currentFrame == 0);
+}
+
+TEST_CASE("DuplicateFrames inserts the copies as a block after the selection")
+{
+    Canvas c = TaggedCanvas(4);
+    c.loopFrame = 3;
+
+    int first = c.DuplicateFrames({0, 2});
+    CHECK(first == 3);
+    REQUIRE((int)c.frames.size() == 6);
+    // Block sits after the highest selected index, in selection order.
+    CHECK(c.frames[3].duration == doctest::Approx(0.01f));
+    CHECK(c.frames[4].duration == doctest::Approx(0.03f));
+    // The loop marker (image .04) shifted right past the inserted block.
+    CHECK(c.loopFrame == 5);
+
+    // At the firmware cap, duplication stops cleanly.
+    Canvas fw;
+    fw.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Firmware);
+    while ((int)fw.frames.size() < 31) fw.AddFrame();
+    std::vector<int> all;
+    for (int i = 0; i < 31; i++) all.push_back(i);
+    int firstFw = fw.DuplicateFrames(all); // room for only one copy
+    CHECK(firstFw == 31);
+    CHECK((int)fw.frames.size() == 32);
+}
+
+TEST_CASE("ClearPanel on a specific frame leaves other frames alone")
+{
+    Canvas c;
+    c.Init(CanvasMode::Modern, CanvasExtent::FullPad, CanvasTarget::Host);
+    c.AddFrame();
+    c.AddFrame(); // 3 frames
+    int w = c.Width();
+    const Color red{255, 0, 0};
+    for (auto &f : c.frames)
+        f.SetPixel(0, 0, w, red); // panel 0 LED
+
+    c.ClearPanel(0, 1);
+    CHECK(c.frames[0].GetPixel(0, 0, w) == red);
+    CHECK(c.frames[1].GetPixel(0, 0, w).IsBlack());
+    CHECK(c.frames[2].GetPixel(0, 0, w) == red);
+
+    // Out-of-range frame index is a no-op, not a crash.
+    c.ClearPanel(0, 99);
+    c.ClearPanel(0, -1);
+    CHECK(c.frames[0].GetPixel(0, 0, w) == red);
+}

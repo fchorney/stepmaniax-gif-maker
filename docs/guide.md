@@ -185,6 +185,16 @@ Found under **Edit → Canvas Target**. Switches an open canvas between Firmware
 - **Delete All Left / Delete All Right** - right-click a frame to remove every frame before or after it; the loop markers are adjusted to stay valid
 - **Reorder** - drag frames or use Shift Left/Right shortcuts
 
+### Multi-Frame Selection
+
+- Click a thumbnail to select that frame
+- **Shift+Click** selects the whole range between the last plain-clicked frame and the clicked one
+- **Ctrl+Click** (**Cmd+Click** on macOS) toggles individual frames in and out of the selection
+- Selected frames show a blue outline; the current frame keeps its yellow outline
+- With two or more frames selected, single-frame edits apply to every selected frame: Delete, Duplicate, frame duration, Clear Panel, Clear All Panels, Paste Panel, and Adjust HSV (via its "Selected frames" scope)
+- Duplicating a selection inserts the copies as a block right after it and selects the copies
+- Plain clicks, frame navigation, and structural edits (add, paste, reorder) collapse the selection
+
 ### Playback
 
 - **Play/Pause** - animate the timeline at the configured frame durations

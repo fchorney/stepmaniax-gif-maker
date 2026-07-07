@@ -230,6 +230,7 @@ void RenderPreview(AppState &app)
             if (ImGui::Selectable(buf, isCurrent))
             {
                 app.undo.GoTo(i, app.canvas);
+                app.ClearFrameSelection();
                 app.colorCountsDirty = true;
             }
 

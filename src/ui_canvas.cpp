@@ -333,6 +333,9 @@ void RenderCanvas(AppState &app)
 
         if (ImGui::BeginPopup("##canvas_ctx"))
         {
+            // Per-frame edits apply to every selected timeline frame when a
+            // multi-selection exists.
+            bool multiSel = app.HasMultiSelection();
             if (app.rightClickPanel >= 0)
                 ImGui::Text("Panel %d", app.rightClickPanel);
             ImGui::Separator();
@@ -346,25 +349,31 @@ void RenderCanvas(AppState &app)
                             app.panelClipboard.push_back(app.canvas.CurrentFrame().GetPixel(x, y, w));
                 app.panelClipboardValid = true;
             }
-            if (ImGui::MenuItem("Paste Panel", nullptr, false, app.panelClipboardValid) && app.rightClickPanel >= 0)
+            if (ImGui::MenuItem(multiSel ? "Paste Panel (Selected Frames)" : "Paste Panel", nullptr, false, app.panelClipboardValid) && app.rightClickPanel >= 0)
             {
                 int w = app.canvas.Width(), h = app.canvas.Height();
-                int idx = 0;
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        if (app.canvas.PanelAt(x, y) == app.rightClickPanel && app.canvas.IsLedPosition(x, y))
-                        {
-                            if (idx < (int)app.panelClipboard.size())
-                                app.canvas.CurrentFrame().SetPixel(x, y, w, app.panelClipboard[idx]);
-                            idx++;
-                        }
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Panel");
+                for (int fi : app.SelectionOrCurrent())
+                {
+                    int idx = 0;
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                            if (app.canvas.PanelAt(x, y) == app.rightClickPanel && app.canvas.IsLedPosition(x, y))
+                            {
+                                if (idx < (int)app.panelClipboard.size())
+                                    app.canvas.frames[fi].SetPixel(x, y, w, app.panelClipboard[idx]);
+                                idx++;
+                            }
+                }
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Paste Panel (Selected Frames)" : "Paste Panel");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Clear This Panel") && app.rightClickPanel >= 0)
+            if (ImGui::MenuItem(multiSel ? "Clear This Panel (Selected Frames)" : "Clear This Panel") && app.rightClickPanel >= 0)
             {
-                app.canvas.ClearPanel(app.rightClickPanel);
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel");
+                for (int fi : app.SelectionOrCurrent())
+                    app.canvas.ClearPanel(app.rightClickPanel, fi);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel");
             }
             if (ImGui::MenuItem("Clear This Panel (All Frames)") && app.rightClickPanel >= 0)
             {
@@ -377,10 +386,13 @@ void RenderCanvas(AppState &app)
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Quantize Panel");
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Clear All Panels"))
+            if (ImGui::MenuItem(multiSel ? "Clear All Panels (Selected Frames)" : "Clear All Panels"))
             {
-                app.canvas.ClearAll();
-                app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All");
+                for (int fi : app.SelectionOrCurrent())
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        app.canvas.ClearPanel(p, fi);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Clear All (Selected Frames)" : "Clear All");
             }
             if (ImGui::MenuItem("Quantize All Panels", nullptr, false, app.canvas.target == CanvasTarget::Firmware))
             {

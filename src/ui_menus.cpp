@@ -203,8 +203,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
         }
         if (ImGui::BeginMenu("Edit"))
         {
-            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+            if (ImGui::MenuItem("Undo", SHORTCUT_MOD "+Z", false, app.undo.CanUndo())) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+            if (ImGui::MenuItem("Redo", SHORTCUT_MOD "+Y", false, app.undo.CanRedo())) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
             ImGui::Separator();
             if (ImGui::MenuItem("Copy Frame", SHORTCUT_MOD "+C"))
             {
@@ -214,16 +214,25 @@ void RenderMenus(AppState &app, SDL_Window *window)
             if (ImGui::MenuItem("Paste Frame", SHORTCUT_MOD "+V", false, app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames()))
             {
                 app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
+                app.ClearFrameSelection();
                 app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
             }
             ImGui::Separator();
-            if (ImGui::BeginMenu("Clear Panel"))
+            // Single-frame edits apply to every selected frame when the
+            // timeline has a multi-selection.
+            bool multiSel = app.HasMultiSelection();
+            if (ImGui::BeginMenu(multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel"))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++)
                 {
                     char label[16];
                     snprintf(label, sizeof(label), "Panel %d", p);
-                    if (ImGui::MenuItem(label)) { app.canvas.ClearPanel(p); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear Panel"); }
+                    if (ImGui::MenuItem(label))
+                    {
+                        for (int fi : app.SelectionOrCurrent()) app.canvas.ClearPanel(p, fi);
+                        app.dirty = true; app.colorCountsDirty = true;
+                        app.undo.SaveState(app.canvas, multiSel ? "Clear Panel (Selected Frames)" : "Clear Panel");
+                    }
                 }
                 ImGui::EndMenu();
             }
@@ -237,7 +246,14 @@ void RenderMenus(AppState &app, SDL_Window *window)
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Clear All Panels")) { app.canvas.ClearAll(); app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Clear All"); }
+            if (ImGui::MenuItem(multiSel ? "Clear All Panels (Selected Frames)" : "Clear All Panels"))
+            {
+                for (int fi : app.SelectionOrCurrent())
+                    for (int p = 0; p < app.canvas.PanelCount(); p++)
+                        app.canvas.ClearPanel(p, fi);
+                app.dirty = true; app.colorCountsDirty = true;
+                app.undo.SaveState(app.canvas, multiSel ? "Clear All (Selected Frames)" : "Clear All");
+            }
             if (ImGui::BeginMenu("Quantize Panel", app.canvas.target == CanvasTarget::Firmware))
             {
                 for (int p = 0; p < app.canvas.PanelCount(); p++)
@@ -591,16 +607,25 @@ void RenderMenus(AppState &app, SDL_Window *window)
     }
     static bool hsvInit = false;
     static std::vector<CanvasFrame> hsvSnapshot;
+    static std::vector<int> hsvSelection;
     static int hsvFrame = 0;
     static HsvAdjust hsvAdj;
-    static bool hsvAllFrames = false;
+    enum { HsvScope_Current = 0, HsvScope_Selected, HsvScope_All };
+    static int hsvScope = HsvScope_Current;
     if (ImGui::BeginPopupModal("Adjust HSV", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         if (!hsvInit)
         {
             hsvSnapshot = app.canvas.frames;
+            hsvSelection = app.SelectionOrCurrent();
             hsvFrame = app.canvas.currentFrame;
             hsvAdj = HsvAdjust{};
+            // Default the scope to the timeline selection; never leave a stale
+            // "selected" scope active without one.
+            if (app.HasMultiSelection())
+                hsvScope = HsvScope_Selected;
+            else if (hsvScope == HsvScope_Selected)
+                hsvScope = HsvScope_Current;
             hsvInit = true;
         }
 
@@ -620,15 +645,27 @@ void RenderMenus(AppState &app, SDL_Window *window)
         ImGui::SetNextItemWidth(220);
         ImGui::SliderFloat("Value +/-", &hsvAdj.val_add, -1.0f, 1.0f, "%+.2f");
         ImGui::Spacing();
-        ImGui::Checkbox("All frames", &hsvAllFrames);
+        ImGui::TextDisabled("Apply to:");
+        ImGui::SameLine();
+        ImGui::RadioButton("Current frame", &hsvScope, HsvScope_Current);
+        ImGui::SameLine();
+        bool hasSelection = hsvSelection.size() > 1;
+        if (!hasSelection) ImGui::BeginDisabled();
+        ImGui::RadioButton("Selected frames", &hsvScope, HsvScope_Selected);
+        if (!hasSelection) ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::RadioButton("All frames", &hsvScope, HsvScope_All);
         ImGui::SameLine();
         if (ImGui::SmallButton("Reset"))
             hsvAdj = HsvAdjust{};
 
         // Recompute the preview from the snapshot every frame.
         app.canvas.frames = hsvSnapshot;
-        if (hsvAllFrames)
+        if (hsvScope == HsvScope_All)
             for (int i = 0; i < (int)app.canvas.frames.size(); i++)
+                app.canvas.AdjustHsv(i, hsvAdj);
+        else if (hsvScope == HsvScope_Selected)
+            for (int i : hsvSelection)
                 app.canvas.AdjustHsv(i, hsvAdj);
         else
             app.canvas.AdjustHsv(hsvFrame, hsvAdj);
@@ -639,7 +676,10 @@ void RenderMenus(AppState &app, SDL_Window *window)
         {
             app.dirty = true;
             app.colorCountsDirty = true;
-            app.undo.SaveState(app.canvas, hsvAllFrames ? "Adjust HSV (all frames)" : "Adjust HSV");
+            app.undo.SaveState(app.canvas,
+                hsvScope == HsvScope_All ? "Adjust HSV (all frames)"
+                : hsvScope == HsvScope_Selected ? "Adjust HSV (selected frames)"
+                : "Adjust HSV");
             hsvInit = false;
             ImGui::CloseCurrentPopup();
         }
@@ -796,6 +836,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.currentFilePath = g_importPath;
             app.prefs.AddRecentFile(g_importPath);
             app.showExportWarning = false;
+            app.ClearFrameSelection();
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Open");
             app.colorCountsDirty = true;
@@ -1017,6 +1058,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
             app.canvas.Init(newCanvasMode, newCanvasExtent, newCanvasTarget);
             app.currentFilePath.clear();
             app.dirty = false; app.undo.MarkSaved();
+            app.ClearFrameSelection();
             app.undo.Clear();
             app.undo.SaveState(app.canvas, "Initial");
             ImGui::CloseCurrentPopup();
@@ -1053,8 +1095,8 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.replace)) app.tool = Tool_Replace;
         if (ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.pick)) app.tool = Tool_Pick;
 
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) { app.undo.Undo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) { app.undo.Redo(app.canvas); app.ClearFrameSelection(); app.dirty = app.undo.HasUnsavedChanges(); app.colorCountsDirty = true; }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E)) app.showHsvDialog = true;
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
@@ -1065,6 +1107,7 @@ void RenderMenus(AppState &app, SDL_Window *window)
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && app.frameClipboardValid && (int)app.canvas.frames.size() < app.canvas.MaxFrames())
         {
             app.canvas.InsertFrame(app.canvas.currentFrame + 1, app.frameClipboard);
+            app.ClearFrameSelection();
             app.dirty = true; app.colorCountsDirty = true; app.undo.SaveState(app.canvas, "Paste Frame");
         }
 
