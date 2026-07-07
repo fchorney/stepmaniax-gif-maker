@@ -14,7 +14,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
+        run: sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list && sudo apt-get update && sudo apt-get install -y libudev-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl-dev
 
       - name: Build
         run: |
