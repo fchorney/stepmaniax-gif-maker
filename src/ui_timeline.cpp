@@ -117,6 +117,7 @@ void RenderTimeline(AppState &app)
         // which plays out and parks on the last frame.
         static bool holdSim = false;
         static bool holdEngaged = false;
+        static double holdHintUntil = 0; // shows why Hold/H did nothing
         if (app.canvas.loopEndFrame < 0)
             holdSim = false;
         if (holdSim && totalFrames > 1)
@@ -205,6 +206,24 @@ void RenderTimeline(AppState &app)
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Press and hold to simulate deadsync playback:\nintro, then the loop region repeats while held;\nreleasing snaps to the outro. Press again during\nthe outro to jump back into the loop.");
+        }
+        else if (app.canvas.target == CanvasTarget::Host)
+        {
+            // Keep Hold discoverable: disabled until a loop-end marker exists.
+            ImGui::SameLine();
+            ImGui::BeginDisabled();
+            ImGui::Button("Hold");
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Simulates deadsync hold playback (%s).\nNeeds a loop-end marker first: right-click a\nframe and choose Set Loop End.", ImGui::GetKeyName((ImGuiKey)app.prefs.keys.holdSim));
+        }
+        if (ImGui::GetTime() < holdHintUntil)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "%s",
+                app.canvas.target == CanvasTarget::Host
+                    ? "Hold needs a loop-end marker: right-click a frame > Set Loop End"
+                    : "Hold needs a loop-end marker (Host target only)");
         }
 
         // --- Move ---
@@ -365,6 +384,9 @@ void RenderTimeline(AppState &app)
                         app.canvas.currentFrame = 0;
                 }
             }
+            if (app.canvas.loopEndFrame < 0 && noMods
+                && ImGui::IsKeyPressed((ImGuiKey)app.prefs.keys.holdSim, false))
+                holdHintUntil = ImGui::GetTime() + 4.0;
             if (app.canvas.loopEndFrame >= 0)
             {
                 ImGuiKey holdKey = (ImGuiKey)app.prefs.keys.holdSim;
