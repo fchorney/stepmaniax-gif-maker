@@ -86,6 +86,49 @@ void Canvas::DeleteFrame(int idx)
         loopEndFrame = -1;
 }
 
+void Canvas::DeleteFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < (int)frames.size())
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (sorted.empty()) return;
+
+    // Delete back to front so earlier indices stay valid; DeleteFrame keeps
+    // at least one frame and tracks the loop markers.
+    for (auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+        DeleteFrame(*it);
+
+    // Land on the frame that took the first deleted slot.
+    currentFrame = std::min(sorted.front(), (int)frames.size() - 1);
+}
+
+int Canvas::DuplicateFrames(const std::vector<int> &indices)
+{
+    std::vector<int> sorted;
+    for (int i : indices)
+        if (i >= 0 && i < (int)frames.size())
+            sorted.push_back(i);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (sorted.empty()) return -1;
+
+    std::vector<CanvasFrame> copies;
+    for (int i : sorted)
+        copies.push_back(frames[i]);
+
+    int firstCopy = sorted.back() + 1;
+    int at = firstCopy;
+    for (const auto &copy : copies)
+    {
+        if ((int)frames.size() >= MaxFrames()) break; // stop cleanly at the cap
+        InsertFrame(at++, copy);
+    }
+    return at > firstCopy ? firstCopy : -1;
+}
+
 void Canvas::SwapFrames(int a, int b)
 {
     if (a == b) return;
@@ -206,8 +249,14 @@ bool Canvas::IsLedPosition(int x, int y) const
 
 void Canvas::ClearPanel(int panel)
 {
+    ClearPanel(panel, currentFrame);
+}
+
+void Canvas::ClearPanel(int panel, int frameIndex)
+{
     if (panel < 0 || panel > 8) return;
-    auto &frame = CurrentFrame();
+    if (frameIndex < 0 || frameIndex >= (int)frames.size()) return;
+    auto &frame = frames[frameIndex];
     int w = Width(), h = Height();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)

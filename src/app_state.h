@@ -5,6 +5,7 @@
 #include "undo.h"
 #include "preferences.h"
 #include "imgui.h"
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -86,6 +87,43 @@ struct AppState
     bool onionSkin = false;
     bool onionPrev = true;
     bool onionNext = true;
+
+    // Multi-frame selection on the timeline (sorted, unique). Empty means
+    // "just the current frame"; single-frame edits apply to every selected
+    // frame when two or more are selected.
+    std::vector<int> selectedFrames;
+    int selectAnchor = 0; // range start for shift-click
+
+    bool IsFrameSelected(int f) const
+    {
+        return std::find(selectedFrames.begin(), selectedFrames.end(), f) != selectedFrames.end();
+    }
+
+    // The frames an edit applies to: the multi-selection when two or more
+    // frames are selected, otherwise just the current frame. A lone selected
+    // frame never diverges from the current frame.
+    std::vector<int> SelectionOrCurrent() const
+    {
+        std::vector<int> out;
+        int n = (int)canvas.frames.size();
+        for (int f : selectedFrames)
+            if (f >= 0 && f < n)
+                out.push_back(f);
+        if (out.size() < 2)
+        {
+            out.clear();
+            out.push_back(canvas.currentFrame);
+        }
+        return out;
+    }
+
+    bool HasMultiSelection() const { return SelectionOrCurrent().size() > 1; }
+
+    void ClearFrameSelection()
+    {
+        selectedFrames.clear();
+        selectAnchor = canvas.currentFrame;
+    }
 
     // Cached color counts (invalidated on canvas change)
     int cachedColorCounts[9] = {};

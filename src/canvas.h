@@ -95,6 +95,15 @@ struct Canvas
 
     // Swap two frames, moving loop markers with their frame images.
     void SwapFrames(int a, int b);
+
+    // Delete several frames at once (indices in any order; duplicates and
+    // out-of-range entries ignored). Always keeps at least one frame.
+    void DeleteFrames(const std::vector<int> &indices);
+
+    // Duplicate several frames at once: the copies are inserted as a block
+    // right after the highest index, in index order. Returns the index of the
+    // first copy, or -1 if nothing was duplicated.
+    int DuplicateFrames(const std::vector<int> &indices);
     CanvasFrame &CurrentFrame();
     const CanvasFrame &CurrentFrame() const;
 
@@ -115,6 +124,9 @@ struct Canvas
 
     // Clear all LED positions in a specific panel to black, on the current frame.
     void ClearPanel(int panel);
+
+    // Clear all LED positions in a specific panel to black, on one frame.
+    void ClearPanel(int panel, int frameIndex);
 
     // Clear a specific panel to black across every frame.
     void ClearPanelAllFrames(int panel);
